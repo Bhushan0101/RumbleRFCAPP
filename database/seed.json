@@ -1,0 +1,104 @@
+{
+  "athletes": [
+    {
+      "name": "Adam Hayes",
+      "nick": "The Storm",
+      "division": "Lightweight",
+      "country": "Ireland",
+      "record": "8–1–0"
+    },
+    {
+      "name": "Leo Silva",
+      "nick": "El Fuego",
+      "division": "Featherweight",
+      "country": "Brazil",
+      "record": "10–2–0"
+    },
+    {
+      "name": "Daniel Cole",
+      "nick": "Iron",
+      "division": "Welterweight",
+      "country": "United Kingdom",
+      "record": "7–0–0"
+    },
+    {
+      "name": "Rayan Malik",
+      "nick": "The Hunter",
+      "division": "Lightweight",
+      "country": "Ireland",
+      "record": "6–2–0"
+    },
+    {
+      "name": "Marco Costa",
+      "nick": "The Machine",
+      "division": "Welterweight",
+      "country": "Brazil",
+      "record": "9–3–0"
+    },
+    {
+      "name": "Ethan Reid",
+      "nick": "Relentless",
+      "division": "Featherweight",
+      "country": "United Kingdom",
+      "record": "5–1–0"
+    },
+    {
+      "name": "Luca Moretti",
+      "nick": "The Wolf",
+      "division": "Lightweight",
+      "country": "Italy",
+      "record": "7–2–0"
+    },
+    {
+      "name": "Sean Byrne",
+      "nick": "The Rebel",
+      "division": "Featherweight",
+      "country": "Ireland",
+      "record": "4–0–0"
+    }
+  ],
+  "stories": [
+    {
+      "title": "A new chapter. The same fighting spirit.",
+      "type": "News",
+      "body": "This concept introduces RFC through a confident visual identity: deep green, championship gold and a focus on the athletes. This is sample editorial content; official announcements will appear here when supplied."
+    },
+    {
+      "title": "Inside the cage: the discipline behind the fight",
+      "type": "Interviews",
+      "body": "The preparation starts long before fight night. This sample interview layout provides space for athlete perspectives, training stories and the journey to competition. Replace this text with an approved RFC interview."
+    },
+    {
+      "title": "The next generation steps into the spotlight",
+      "type": "News",
+      "body": "A place to discover emerging talent and follow their progress. This demonstration story is a placeholder for verified RFC athlete announcements."
+    },
+    {
+      "title": "Fight night, through a different lens",
+      "type": "Galleries",
+      "body": "This gallery preview uses a generated arena illustration. Add licensed event photographs to turn it into a full RFC event gallery."
+    },
+    {
+      "title": "Road to the cage: training camp",
+      "type": "Videos",
+      "body": "A future home for training camp footage and athlete features. No video has been supplied for this concept. A real video player can be connected when approved footage is available."
+    }
+  ],
+  "events": [
+    {
+      "title": "THE NEXT CHAPTER",
+      "sub": "RFC • SHOWCASE 01",
+      "status": "Upcoming"
+    },
+    {
+      "title": "RISE OF THE CONTENDERS",
+      "sub": "RFC • SHOWCASE 02",
+      "status": "Upcoming"
+    },
+    {
+      "title": "NIGHT OF CHAMPIONS",
+      "sub": "RFC • ARCHIVE CONCEPT",
+      "status": "Past"
+    }
+  ]
+}

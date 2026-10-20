@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+.env.*
+!.env.example
+*.sqlite3-wal
+*.sqlite3-shm
+*.backup
+.DS_Store
+admin_config.json
+public/assets/uploads/
+# Generated demo fighter images ARE committed so the deployed site renders.
+# (Re-generate locally with: python scripts/seed_demo_fighters.py)

@@ -1,0 +1,15 @@
+# Render deployment for the RFC concept site.
+# This runs the stdlib Python server (static files + read-only content API + optional admin).
+# Note: Render's filesystem is ephemeral, so admin writes and uploads do NOT persist across
+# deploys/restarts — the site serves the committed seeded demo content. For a purely static
+# deploy instead, publish the `public/` folder (it falls back to public/data/content.json).
+services:
+  - type: web
+    name: rfc-rumble-fighting
+    runtime: python
+    plan: free
+    buildCommand: "python scripts/export_content.py"
+    startCommand: "python server.py --host 0.0.0.0"
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.0"

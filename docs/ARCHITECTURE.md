@@ -1,0 +1,75 @@
+# Architecture
+
+## Runtime flow
+
+Browser → Python server → static assets in public/.
+Browser → GET /api/content → SQLite queries → JSON → frontend views.
+If the API is unavailable, the frontend fetches data/content.json for static-only use.
+
+`public/app.js` initializes after loading content. It keeps athletes/events/stories in memory for the session. All routing is hash-based, so direct page links do not require server rewrite rules. Refresh the page after database changes.
+
+## Files
+
+- index.html: shared header, footer, modal and main region.
+- style.css: complete visual system and breakpoints at 1500/1050/760px.
+- app.js: view renderers, filters, local search, dialogs and content loading.
+- server.py: Python ThreadingHTTPServer, static handler, SQLite read endpoints, and the optional auth-gated admin write API.
+- scripts/init_db.py: schema and demo seeding (v1 baseline).
+- scripts/migrate.py + scripts/migrations/NNN_*.sql: numbered, idempotent migration runner (advances a live DB past v1).
+- scripts/set_admin_password.py: one-time local admin password setup (writes gitignored admin_config.json).
+- scripts/export_content.py: database-to-static JSON export.
+- public/admin.html + public/admin.js: local admin content-management UI (separate from the public SPA).
+
+## API
+
+Public content endpoints are GET-only JSON, use no authentication and are intended for localhost.
+
+| Route | Response |
+|---|---|
+| /api/health | Service and database status (live schema version) |
+| /api/content | All content collections and settings |
+| /api/athletes | Athlete rows, with nick/record compatibility fields |
+| /api/events | Event rows, with sub compatibility field |
+| /api/stories | Editorial content |
+| /api/gallery_items | Instagram reels + YouTube/Rumble videos |
+| /api/rankings | Prepared ranking rows |
+| /api/bouts | Prepared event matchups |
+| /api/achievements | Prepared athlete achievements |
+| /api/media_items | Prepared gallery/video assets |
+| /api/sponsors | Prepared partners |
+| /api/settings | Brand settings map (incl. instagram_url, youtube_url, gallery_enabled) |
+
+GET responses are generated from fresh read-only SQLite connections. The server only serves public/ as static files; the SQLite database and documents are outside that directory.
+
+## Admin write API (optional, local, auth-gated)
+
+Under `/api/admin/*`, **disabled by default**. It stays off (writes return 503) until a local admin
+password is configured via `python scripts/set_admin_password.py` (PBKDF2-HMAC-SHA256 hash stored in
+the gitignored `admin_config.json` at the repo root — never under `public/`; env vars
+`RFC_ADMIN_PASSWORD_HASH`/`RFC_ADMIN_SALT` also work).
+
+- `POST /api/admin/login` / `logout`, `GET /api/admin/session` — session lifecycle. Login issues an
+  opaque token stored in the `sessions` table and a `HttpOnly; SameSite=Strict` cookie (8h expiry).
+- `GET|POST /api/admin/<collection>`, `PUT|DELETE /api/admin/<collection>/<id>` — CRUD over an
+  allowlisted set of tables (athletes, events, gallery_items, bouts, rankings, achievements,
+  sponsors). `PUT /api/admin/settings/<key>` upserts an allowlisted setting (incl. the
+  `gallery_enabled`/`news_enabled` feature flags).
+- `POST /api/admin/upload` — admin-only athlete image upload (multipart, hand-parsed; PNG/JPG/WEBP
+  validated by magic bytes; 6 MB cap; server-generated filename written to `public/assets/athletes/`).
+- `POST /api/admin/import/athletes` + `GET /api/admin/template/athletes.csv` — CSV bulk import with a
+  downloadable template; each row validated with the athlete validators, bad rows skipped and reported.
+- Every write runs on a read-write connection (`PRAGMA foreign_keys=ON`), after auth, with
+  per-field validation and http/https URL validation. CSRF defenses: 127.0.0.1 bind, SameSite=Strict
+  cookie, a required `X-Requested-With: fetch` header, and same-origin Origin/Referer checks.
+- Rendering is XSS-safe: `public/app.js` and `public/admin.js` escape all DB-derived text (`esc`) and
+  route src/href through `safeUrl` so admin-entered content cannot script the site.
+- Feature flags: Gallery and News are off by default (`gallery_enabled`/`news_enabled`); their routes,
+  nav links and admin editing are hidden while off. Instagram is parked — see `docs/INSTAGRAM.md`.
+
+## Known limitations
+
+Cards use one generated arena image repeatedly unless a per-row image URL is supplied via admin. Athlete and event dialogs include concept copy (biography/venue show real values when entered). Rankings derive from athlete order rather than reading rankings rows. Expanded tables (bouts/achievements/media_items/sponsors) are not yet rendered. The Gallery page renders gallery_items (Instagram reels + YouTube/Rumble videos) as link-out tiles with a client-side search over Rumble videos; URLs are sample placeholders until real accounts are connected in admin. Privacy/terms/contact are placeholders. Google Fonts needs internet access. Browser/device QA was unavailable in the build environment.
+
+## Production path
+
+Retain static public/ hosting for an editorial-only site, exporting JSON after updates. For live content editing, choose an authenticated backend/CMS and migrate the read API deliberately. Add input validation, text escaping, URL validation, authentication, authorization and backups before untrusted writes. Do not use the included Python development HTTP server as public production hosting.

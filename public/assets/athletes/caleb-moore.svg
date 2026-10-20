@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="500" viewBox="0 0 400 500">
+<defs><radialGradient id="bg" cx="50%" cy="38%" r="70%">
+<stop offset="0" stop-color="hsl(341,40%,26%)"/><stop offset="1" stop-color="#0b100c"/></radialGradient></defs>
+<rect width="400" height="500" fill="url(#bg)"/>
+<circle cx="200" cy="180" r="94" fill="hsl(341,22%,78%)"/>
+<path d="M200 268c-80 0-136 48-154 120 0 0 0 112 0 112h308s0-112 0-112c-18-72-74-120-154-120z" fill="hsl(341,28%,30%)"/>
+<path d="M150 300h100l-16 70h-68z" fill="hsl(21,55%,45%)"/>
+
+
+<text x="200" y="486" font-family="Arial,sans-serif" font-size="30" font-weight="800" fill="#fff" text-anchor="middle" opacity="0.9">CM</text>
+</svg>
