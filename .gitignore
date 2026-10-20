@@ -8,6 +8,7 @@ __pycache__/
 *.sqlite3-shm
 *.backup
 .DS_Store
+.claude/
 admin_config.json
 public/assets/uploads/
 # Generated demo fighter images ARE committed so the deployed site renders.
