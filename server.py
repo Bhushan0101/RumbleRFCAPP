@@ -273,6 +273,64 @@ def import_athletes_csv(text):
                 errors.append(f'row {i}: {e}')
     return added, errors
 
+# Reusable admin CRUD ops (shared by the HTTP Handler in this file and the WSGI app in main.py).
+class Conflict(Exception): pass
+class NotFound(Exception): pass
+
+def op_list(collection):
+    table=COLLECTIONS[collection][0]
+    with rw_conn() as db:
+        return [dict(r) for r in db.execute(f'SELECT * FROM {table} ORDER BY id')]
+
+def op_create(collection,payload):
+    table=COLLECTIONS[collection][0]
+    clean=validate(collection,payload)
+    if not clean: raise Invalid('no fields supplied')
+    cols=','.join(clean); marks=','.join('?'*len(clean))
+    try:
+        with rw_conn() as db:
+            cur=db.execute(f'INSERT INTO {table}({cols}) VALUES({marks})',list(clean.values()))
+            return dict(db.execute(f'SELECT * FROM {table} WHERE id=?',(cur.lastrowid,)).fetchone())
+    except sqlite3.IntegrityError as e:
+        raise Conflict(f'constraint failed: {e}')
+
+def op_update(collection,rid,payload):
+    table=COLLECTIONS[collection][0]
+    try: rid=int(rid)
+    except (TypeError,ValueError): raise Invalid('invalid id')
+    clean=validate(collection,payload)
+    if not clean: raise Invalid('no fields supplied')
+    assigns=','.join(f'{c}=?' for c in clean)
+    try:
+        with rw_conn() as db:
+            cur=db.execute(f'UPDATE {table} SET {assigns} WHERE id=?',[*clean.values(),rid])
+            if cur.rowcount==0: raise NotFound('not found')
+            return dict(db.execute(f'SELECT * FROM {table} WHERE id=?',(rid,)).fetchone())
+    except sqlite3.IntegrityError as e:
+        raise Conflict(f'constraint failed: {e}')
+
+def op_delete(collection,rid):
+    table=COLLECTIONS[collection][0]
+    try: rid=int(rid)
+    except (TypeError,ValueError): raise Invalid('invalid id')
+    with rw_conn() as db:
+        cur=db.execute(f'DELETE FROM {table} WHERE id=?',(rid,))
+    if not cur.rowcount: raise NotFound('not found')
+    return {'ok':True}
+
+def op_settings():
+    with rw_conn() as db:
+        return {r['key']:r['value'] for r in db.execute('SELECT * FROM site_settings')}
+
+def op_put_setting(key,value):
+    if key not in SETTING_KEYS: raise Invalid('unknown or protected setting')
+    try: value=SETTING_KEYS[key](value)
+    except Invalid as e: raise Invalid(f'{key}: {e}')
+    with rw_conn() as db:
+        db.execute('INSERT INTO site_settings(key,value) VALUES(?,?) '
+                   'ON CONFLICT(key) DO UPDATE SET value=excluded.value',(key,str(value)))
+    return {'key':key,'value':str(value)}
+
 # ---------------------------------------------------------------------------
 # HTTP handler
 # ---------------------------------------------------------------------------
@@ -356,13 +414,9 @@ class Handler(SimpleHTTPRequestHandler):
                         'configured':admin_credentials() is not None});return
         if not self._require_admin(): return
         if rest in COLLECTIONS:
-            table=COLLECTIONS[rest][0]
-            with rw_conn() as db:
-                rows=[dict(r) for r in db.execute(f'SELECT * FROM {table} ORDER BY id')]
-            self._json(rows);return
+            self._json(op_list(rest));return
         if rest=='settings':
-            with rw_conn() as db:
-                self._json({r['key']:r['value'] for r in db.execute('SELECT * FROM site_settings')});return
+            self._json(op_settings());return
         if rest=='template/athletes.csv':
             sample=['Jane Doe','The Example','Lightweight','Ireland','0','0','0','Sample biography text.']
             buf=io.StringIO(); w=csv.writer(buf)
@@ -426,17 +480,8 @@ class Handler(SimpleHTTPRequestHandler):
         self._json({'ok':True},200,{'Set-Cookie':'rfc_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'})
 
     def _create(self,collection):
-        table=COLLECTIONS[collection][0]
-        clean=validate(collection,self._read_json())
-        if not clean: raise Invalid('no fields supplied')
-        cols=','.join(clean); marks=','.join('?'*len(clean))
-        try:
-            with rw_conn() as db:
-                cur=db.execute(f'INSERT INTO {table}({cols}) VALUES({marks})',list(clean.values()))
-                row=dict(db.execute(f'SELECT * FROM {table} WHERE id=?',(cur.lastrowid,)).fetchone())
-        except sqlite3.IntegrityError as e:
-            return self._json({'error':f'constraint failed: {e}'},409)
-        self._json(row,201)
+        try: self._json(op_create(collection,self._read_json()),201)
+        except Conflict as e: self._json({'error':str(e)},409)
 
     # -- PUT ---------------------------------------------------------------
     def do_PUT(self):
@@ -457,30 +502,12 @@ class Handler(SimpleHTTPRequestHandler):
             self._json({'error':str(e)},400)
 
     def _update(self,collection,rid):
-        table=COLLECTIONS[collection][0]
-        try: rid=int(rid)
-        except ValueError: raise Invalid('invalid id')
-        clean=validate(collection,self._read_json())
-        if not clean: raise Invalid('no fields supplied')
-        assigns=','.join(f'{c}=?' for c in clean)
-        try:
-            with rw_conn() as db:
-                cur=db.execute(f'UPDATE {table} SET {assigns} WHERE id=?',[*clean.values(),rid])
-                if cur.rowcount==0: return self._json({'error':'not found'},404)
-                row=dict(db.execute(f'SELECT * FROM {table} WHERE id=?',(rid,)).fetchone())
-        except sqlite3.IntegrityError as e:
-            return self._json({'error':f'constraint failed: {e}'},409)
-        self._json(row,200)
+        try: self._json(op_update(collection,rid,self._read_json()),200)
+        except NotFound as e: self._json({'error':str(e)},404)
+        except Conflict as e: self._json({'error':str(e)},409)
 
     def _put_setting(self,key):
-        if key not in SETTING_KEYS: raise Invalid('unknown or protected setting')
-        data=self._read_json()
-        try: value=SETTING_KEYS[key](data.get('value'))
-        except Invalid as e: raise Invalid(f'{key}: {e}')
-        with rw_conn() as db:
-            db.execute('INSERT INTO site_settings(key,value) VALUES(?,?) '
-                       'ON CONFLICT(key) DO UPDATE SET value=excluded.value',(key,str(value)))
-        self._json({'key':key,'value':str(value)},200)
+        self._json(op_put_setting(key,self._read_json().get('value')),200)
 
     # -- DELETE ------------------------------------------------------------
     def do_DELETE(self):
@@ -493,13 +520,8 @@ class Handler(SimpleHTTPRequestHandler):
             if not self._require_admin(): return
             parts=rest.split('/')
             if len(parts)==2 and parts[0] in COLLECTIONS:
-                table=COLLECTIONS[parts[0]][0]
-                try: rid=int(parts[1])
-                except ValueError: raise Invalid('invalid id')
-                with rw_conn() as db:
-                    cur=db.execute(f'DELETE FROM {table} WHERE id=?',(rid,))
-                return self._json({'ok':True} if cur.rowcount else {'error':'not found'},
-                                  200 if cur.rowcount else 404)
+                try: return self._json(op_delete(parts[0],parts[1]),200)
+                except NotFound as e: return self._json({'error':str(e)},404)
             self.send_error(404,'Admin route not found')
         except Invalid as e:
             self._json({'error':str(e)},400)

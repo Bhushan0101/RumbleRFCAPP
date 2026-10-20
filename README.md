@@ -92,6 +92,22 @@ deploys/restarts — the deployed site serves the committed seeded demo (athlete
 fighter images). For a fully static deploy instead, publish the `public/` folder to any static host
 (it uses the `content.json` fallback).
 
+### Enabling the live admin (optional, demo-only)
+
+The deployed WSGI app (`main.py`) includes the authenticated admin write API, but it stays **disabled
+until you set a password via environment variables** in the Render dashboard:
+
+1. Generate a hash + salt locally:
+   `python -c "import hashlib,secrets; s=secrets.token_bytes(16); print('SALT',s.hex()); print('HASH',hashlib.pbkdf2_hmac('sha256',b'YOUR_PASSWORD',s,200000).hex())"`
+2. In Render → your service → **Environment**, add `RFC_ADMIN_SALT` and `RFC_ADMIN_PASSWORD_HASH`
+   from the output above (the plaintext password never leaves your machine).
+3. Redeploy, then open `/admin.html` on the live URL and sign in.
+
+Admin edits on the live site are **ephemeral** (they reset on the next restart/deploy). The panel shows
+a "LIVE DEMO ADMIN — changes reset" banner on hosted instances. For durable edits, use a persistent
+disk / external database, or just edit locally (`python server.py`) and push. This stdlib/WSGI server
+has no rate limiting; only enable the live admin for a trusted demo.
+
 ## Important content status
 
 All athlete identities, records, rankings, events and stories are samples. The arena image was generated for this concept. It is not evidence of a real RFC event and does not depict the named sample athletes. The logo artwork was supplied by the user. Tickets, venue details, official contacts, policies and videos have not been supplied. No payments, email delivery, registration or real ticket purchasing are implemented.

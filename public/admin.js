@@ -2,6 +2,9 @@
    Renders all stored values escaped so stored content can never script this page. */
 const root=document.getElementById('admin');
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// On a hosted (non-localhost) instance, warn that edits are ephemeral and reset on restart.
+(function(){const b=document.getElementById('admin-banner');const local=['localhost','127.0.0.1'].includes(location.hostname);
+ if(b&&!local)b.textContent='LIVE DEMO ADMIN — changes and uploads reset when the server restarts (ephemeral host). For permanent edits, edit locally and push.';})();
 
 // Field specs mirror the server's writable-field validators (server is the source of truth).
 // Gallery and News (stories) editing is intentionally OFF for now — re-add their entries here

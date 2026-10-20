@@ -68,9 +68,14 @@ Meta embed (would need a cloud dependency + account/token). Full detail + re-ena
 
 - Deployed via **`main.py`** (a WSGI `app`) so Render's default `gunicorn main:app` works with no
   dashboard changes. `requirements.txt` = just `gunicorn`; `render.yaml` + `Procfile` included.
-  `main.py` serves `public/` static + the **read-only** JSON API only (migrate-on-import, idempotent).
+  `main.py` serves `public/` static + the read-only JSON API + the **admin write API** (reuses
+  server.py's shared `op_*` CRUD functions so logic is not duplicated; migrate-on-import, idempotent).
+- **Live admin (option A, ephemeral)**: enabled by setting env vars `RFC_ADMIN_SALT` +
+  `RFC_ADMIN_PASSWORD_HASH` in Render (see README for the one-liner to generate them). Edits reset on
+  restart (ephemeral disk). Admin UI shows a "LIVE DEMO" banner on non-localhost hosts. For durable
+  edits use a persistent disk / external DB, or edit locally and push.
 - **Local dev is unchanged and needs zero packages**: `python server.py` (full site + admin write API,
-  binds 127.0.0.1; `--host 0.0.0.0` + `$PORT`/`HOST` for any raw-server hosting).
+  binds 127.0.0.1; local admin password is `test123` in the gitignored `admin_config.json`).
 - The `end_headers` override sends `Cache-Control: no-store` on static files so stale JS/CSS never
   causes a blank page (that was the earlier all-white bug — old cached `app.js`).
 - Render filesystem is ephemeral → admin writes/uploads don't persist; deployed site serves the
