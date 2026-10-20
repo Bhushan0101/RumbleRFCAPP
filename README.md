@@ -77,22 +77,20 @@ Then deploy the contents of `public/`. It falls back to `public/data/content.jso
 
 ## Deploy to Render
 
-A `render.yaml` and `Procfile` are included. On Render, create a **Web Service** from this repo:
+A `render.yaml` and `Procfile` are included, and `main.py` exposes a WSGI `app`, so Render's default
+Python settings work with no dashboard changes:
 
-- Build command: `pip install -r requirements.txt && python scripts/export_content.py`
-- Start command: `python server.py --host 0.0.0.0`  (Render provides `$PORT`; the server reads it)
+- Build command: `pip install -r requirements.txt`
+- Start command: `gunicorn main:app`  (Render's default — serves `public/` + the read-only JSON API)
 
-`requirements.txt` is intentionally empty — the project uses only the Python standard library, but
-Render's default Python build runs `pip install -r requirements.txt`, so the file must exist. If you
-create the service manually in the dashboard, set the **Start Command** above (the dashboard overrides
-`render.yaml`). The server binds `0.0.0.0` only when you pass `--host`/set `HOST`; locally it stays on
-`127.0.0.1`.
+`requirements.txt` lists only `gunicorn` (used for cloud hosting). **Local development still needs zero
+packages** — run `python server.py` for the full site including the admin write API. The deployed WSGI
+app (`main.py`) serves the **public, read-only** surface only.
+
 Render's filesystem is **ephemeral**, so admin writes and uploaded images do **not** persist across
 deploys/restarts — the deployed site serves the committed seeded demo (athletes, rankings, generated
 fighter images). For a fully static deploy instead, publish the `public/` folder to any static host
-(it uses the `content.json` fallback). Set an admin password via env vars
-(`RFC_ADMIN_PASSWORD_HASH` / `RFC_ADMIN_SALT`) only if you intend to use the admin panel in a trusted
-setting — this stdlib server has no rate limiting and is not hardened for untrusted production traffic.
+(it uses the `content.json` fallback).
 
 ## Important content status
 

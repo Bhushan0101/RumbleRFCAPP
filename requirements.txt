@@ -1,1 +1,3 @@
-# RFC uses the Python standard library only — no third-party packages.
+# Local dev (python server.py) needs ZERO packages — standard library only.
+# gunicorn is used ONLY for cloud WSGI hosting via the default `gunicorn main:app`.
+gunicorn>=21.0

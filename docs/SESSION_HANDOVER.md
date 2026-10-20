@@ -66,15 +66,17 @@ Meta embed (would need a cloud dependency + account/token). Full detail + re-ena
 
 ## Deploy / Render (render-ready)
 
-- `render.yaml` + `Procfile` included. Render Web Service: build `python scripts/export_content.py`,
-  start `python server.py --host 0.0.0.0` (server reads `$PORT`/`HOST`; local default stays
-  `127.0.0.1`). The `end_headers` override sends `Cache-Control: no-store` on static files so stale
-  JS/CSS never causes a blank page (that was the earlier all-white bug — old cached `app.js`).
+- Deployed via **`main.py`** (a WSGI `app`) so Render's default `gunicorn main:app` works with no
+  dashboard changes. `requirements.txt` = just `gunicorn`; `render.yaml` + `Procfile` included.
+  `main.py` serves `public/` static + the **read-only** JSON API only (migrate-on-import, idempotent).
+- **Local dev is unchanged and needs zero packages**: `python server.py` (full site + admin write API,
+  binds 127.0.0.1; `--host 0.0.0.0` + `$PORT`/`HOST` for any raw-server hosting).
+- The `end_headers` override sends `Cache-Control: no-store` on static files so stale JS/CSS never
+  causes a blank page (that was the earlier all-white bug — old cached `app.js`).
 - Render filesystem is ephemeral → admin writes/uploads don't persist; deployed site serves the
-  committed seeded demo. Generated fighter images under `public/assets/athletes/` are now **committed**
-  (un-ignored) so the deployed/cloned site renders. Re-generate with `python scripts/seed_demo_fighters.py`.
-- Git: repo initialised in this session. `admin_config.json`, `*.backup`, `public/assets/uploads/`,
-  `__pycache__` stay gitignored. Never commit `admin_config.json`.
+  committed seeded demo. Generated fighter images under `public/assets/athletes/` are **committed**.
+- Git: pushed to https://github.com/Bhushan0101/RumbleRFCAPP (branch `main`).
+  `admin_config.json`, `*.backup`, `.claude/`, `public/assets/uploads/`, `__pycache__` are gitignored.
 
 ## Key files
 
