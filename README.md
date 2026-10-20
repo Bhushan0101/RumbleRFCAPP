@@ -79,10 +79,14 @@ Then deploy the contents of `public/`. It falls back to `public/data/content.jso
 
 A `render.yaml` and `Procfile` are included. On Render, create a **Web Service** from this repo:
 
-- Build command: `python scripts/export_content.py`
+- Build command: `pip install -r requirements.txt && python scripts/export_content.py`
 - Start command: `python server.py --host 0.0.0.0`  (Render provides `$PORT`; the server reads it)
 
-The server binds `0.0.0.0` only when you pass `--host`/set `HOST`; locally it stays on `127.0.0.1`.
+`requirements.txt` is intentionally empty — the project uses only the Python standard library, but
+Render's default Python build runs `pip install -r requirements.txt`, so the file must exist. If you
+create the service manually in the dashboard, set the **Start Command** above (the dashboard overrides
+`render.yaml`). The server binds `0.0.0.0` only when you pass `--host`/set `HOST`; locally it stays on
+`127.0.0.1`.
 Render's filesystem is **ephemeral**, so admin writes and uploaded images do **not** persist across
 deploys/restarts — the deployed site serves the committed seeded demo (athletes, rankings, generated
 fighter images). For a fully static deploy instead, publish the `public/` folder to any static host
