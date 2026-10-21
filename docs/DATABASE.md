@@ -1,5 +1,23 @@
 # SQLite data model
 
+Render stakeholder testing is configured in `render.yaml` with `RFC_DEMO_MODE=1` and an
+isolated ephemeral `RFC_DB_PATH`. Excel templates/upload preview/publication use `ranking_excel.py`;
+install `requirements.txt` for Excel support. Default startup without the demo flag does not
+provision dummy accounts. See [RENDER_TESTING.md](RENDER_TESTING.md) for deployment and user instructions.
+Existing v4 databases are not re-seeded during initialization, preserving portal edits and ranking
+omissions across process restarts on retained storage. No Render deployment was performed here.
+
+
+## Member portal update — 2026-10-21
+
+A connected first-release demo is now implemented. See [MEMBER_PORTAL.md](MEMBER_PORTAL.md) for
+accounts, runtime database, registration/event/result workflows, tests and first go-live options.
+Schema v4 adds accounts and affiliations, promoter ownership, registrations and result auditing.
+Rankings now use stored positions; public events show registrations/cards and athlete profiles show
+bouts. This update supersedes older statements below about those features being unconnected.
+Dummy accounts are seeded by the explicit command or opt-in `RFC_DEMO_MODE=1` startup flag. No production deployment occurred.
+
+
 One relational database contains all content domains; separate database servers would add unnecessary operational complexity at this stage.
 
 `database/rfc.sqlite3` is already created and seeded. `schema.sql` reproduces the tables. `seed.json` preserves the original concept content. SQLite is included in Python; use an IDE SQLite extension or Python to edit it.
@@ -9,8 +27,8 @@ One relational database contains all content domains; separate database servers 
 | athletes | Names, nicknames, division, nationality, W/L/D, biography, portrait and cartoon | 8 | Lists/search/filters/record connected; portrait_url (front) + cartoon_url (flip-card back) rendered; bio in dialog |
 | events | Titles, status, schedule, venue, tickets and poster | 3 | Title/status/subtitle lists connected; other detail fields prepared |
 | stories | Typed editorial text and media metadata | 5 | Lists and article body connected; dedicated media fields prepared |
-| rankings | Position and movement by athlete/division | 8 | Seeded and API-exposed; view still derives order from athletes |
-| bouts | Event-to-athlete matchups and results | 0 | Schema/API ready; not rendered |
+| rankings | Position and movement by athlete/division | 8 | Public view consumes stored position/movement; editable by app admin and Excel import |
+| bouts | Event-to-athlete matchups and results | 0 | Public event cards and athlete history connected |
 | achievements | Athlete achievements | 0 | Schema/API ready; expandable UI still placeholder |
 | media_items | Images/videos belonging to stories | 0 | Schema/API ready; not rendered |
 | gallery_items | Instagram reels + YouTube/Rumble videos (standalone) | 8 | Rendered on the Gallery page; Rumble videos searchable |

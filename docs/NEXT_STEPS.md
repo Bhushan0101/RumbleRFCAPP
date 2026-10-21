@@ -1,5 +1,23 @@
 # Continuation and acceptance criteria
 
+Render stakeholder testing is configured in `render.yaml` with `RFC_DEMO_MODE=1` and an
+isolated ephemeral `RFC_DB_PATH`. Excel templates/upload preview/publication use `ranking_excel.py`;
+install `requirements.txt` for Excel support. Default startup without the demo flag does not
+provision dummy accounts. See [RENDER_TESTING.md](RENDER_TESTING.md) for deployment and user instructions.
+Existing v4 databases are not re-seeded during initialization, preserving portal edits and ranking
+omissions across process restarts on retained storage. No Render deployment was performed here.
+
+
+## Member portal update — 2026-10-21
+
+A connected first-release demo is now implemented. See [MEMBER_PORTAL.md](MEMBER_PORTAL.md) for
+accounts, runtime database, registration/event/result workflows, tests and first go-live options.
+Schema v4 adds accounts and affiliations, promoter ownership, registrations and result auditing.
+Rankings now use stored positions; public events show registrations/cards and athlete profiles show
+bouts. This update supersedes older statements below about those features being unconnected.
+Dummy accounts are seeded by the explicit command or opt-in `RFC_DEMO_MODE=1` startup flag. No production deployment occurred.
+
+
 ## Finished in this export
 
 - [x] Full portable frontend and all local assets.
@@ -12,8 +30,9 @@
 
 ## Next implementation work
 
-- [ ] Read actual rankings position/movement rows in the rankings view.
-- [ ] Connect bouts, achievements, biography/portrait, media and sponsor fields.
+- [x] Read actual rankings position/movement rows in the rankings view.
+- [x] Connect public event fight cards and athlete bout history.
+- [ ] Connect remaining achievements, media and sponsor fields.
 - [ ] Replace sample content with approved RFC content.
 - [ ] Add real date/time display and countdown when dates are known.
 - [ ] Connect verified external ticket booking URL; do not add payment collection by assumption.

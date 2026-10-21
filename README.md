@@ -1,10 +1,27 @@
 # RFC — Rumble Fighting Championship
 
+## New: connected member portal demo
+
+Use **Member portal** in the site navigation for fighter/gym/coach registration, independent
+promotions, event entry/counts, published fight cards and promoter result updates. App admins manage
+ranking positions. See [the demo walkthrough and go-live options](docs/MEMBER_PORTAL.md) for the
+five dummy accounts, isolated runtime database, seeding commands, limitations and validation.
+Dummy users require explicit local seeding or `RFC_DEMO_MODE=1` (configured in the stakeholder-test Render blueprint).
+The portal requires the Python server (including the existing WSGI entry point), not static hosting.
+
+
 A responsive combat-sports website inspired by the supplied UFC reference screenshots, branded with the user's RFC logo: deep green, championship gold, white editorial layouts and dark arena sections.
+
+## Render stakeholder testing and Excel rankings
+
+[Render deployment and testing guide](docs/RENDER_TESTING.md) covers the demo-enabled blueprint,
+five test logins and the admin Excel template → preview → publish workflow. Free-tier demo changes
+can reset on restart/redeploy. No deployment was performed here.
+[Sample Excel template](docs/templates/RFC-rankings-template.xlsx).
 
 ## Run in your IDE
 
-Requires **Python 3.10+**. No pip packages, Node installation, API keys, accounts or paid services are required to run the site.
+Requires **Python 3.10+**. The public site and basic member portal need no pip packages, Node, API keys or paid services. For Excel ranking uploads and Render hosting, first run `python -m pip install -r requirements.txt`.
 
 ```sh
 python server.py
@@ -83,9 +100,8 @@ Python settings work with no dashboard changes:
 - Build command: `pip install -r requirements.txt`
 - Start command: `gunicorn main:app`  (Render's default — serves `public/` + the read-only JSON API)
 
-`requirements.txt` lists only `gunicorn` (used for cloud hosting). **Local development still needs zero
-packages** — run `python server.py` for the full site including the admin write API. The deployed WSGI
-app (`main.py`) serves the **public, read-only** surface only.
+`requirements.txt` includes Gunicorn for hosting and openpyxl/defusedxml for Excel ranking uploads. **The public site and basic local portal still need zero packages** — run `python server.py` for the full site including the admin write API. The deployed WSGI app (`main.py`) serves the public content API, the authenticated member portal,
+and the optional legacy admin API. Public content reads remain read-only; authenticated routes handle writes.
 
 Render's filesystem is **ephemeral**, so admin writes and uploaded images do **not** persist across
 deploys/restarts — the deployed site serves the committed seeded demo (athletes, rankings, generated
@@ -110,7 +126,7 @@ has no rate limiting; only enable the live admin for a trusted demo.
 
 ## Important content status
 
-All athlete identities, records, rankings, events and stories are samples. The arena image was generated for this concept. It is not evidence of a real RFC event and does not depict the named sample athletes. The logo artwork was supplied by the user. Tickets, venue details, official contacts, policies and videos have not been supplied. No payments, email delivery, registration or real ticket purchasing are implemented.
+All athlete identities, records, rankings, events and stories are samples. The arena image was generated for this concept. It is not evidence of a real RFC event and does not depict the named sample athletes. The logo artwork was supplied by the user. Tickets, venue details, official contacts, policies and videos have not been supplied. Member registration and event entry are implemented as a sample-data demo. No payments, email delivery, eligibility verification or real ticket purchasing are implemented.
 
 The original hosted concept remains at https://rfc-rumble-fighting.tunedchair7.chatgpt.site and was not changed by this export. This package adds the local database and server. It contains no hosting credentials or original Git repository metadata.
 

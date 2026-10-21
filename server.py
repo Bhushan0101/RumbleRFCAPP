@@ -5,6 +5,9 @@ authentication-gated admin write API under /api/admin/*. The admin API stays dis
 (returns 503) until a local admin password is configured via scripts/set_admin_password.py
 (or the RFC_ADMIN_PASSWORD_HASH / RFC_ADMIN_SALT environment variables).
 
+The role-based member portal is served separately under /api/portal/; explicit RFC_DEMO_MODE
+can provision stakeholder test accounts. Excel rankings require requirements.txt.
+
 LOCAL DEVELOPMENT ONLY. The server binds to 127.0.0.1. Do not expose it publicly.
 """
 import argparse
@@ -294,6 +297,18 @@ def op_create(collection,payload):
     except sqlite3.IntegrityError as e:
         raise Conflict(f'constraint failed: {e}')
 
+def _protect_portal_records(db, collection, rid, clean=None):
+    """Results and their accounting must be edited together through the portal."""
+    if collection=='bouts' and db.execute('SELECT 1 FROM bout_results WHERE bout_id=?',(rid,)).fetchone():
+        raise Conflict('Use the member portal to correct this recorded result.')
+    if collection=='athletes' and clean and {'wins','losses','draws'} & clean.keys():
+        current=db.execute('SELECT wins,losses,draws FROM athletes WHERE id=?',(rid,)).fetchone()
+        changed=current and any(key in clean and clean[key]!=current[key] for key in ('wins','losses','draws'))
+        if changed and db.execute('SELECT 1 FROM bouts b JOIN bout_results r ON r.bout_id=b.id WHERE b.red_athlete_id=? OR b.blue_athlete_id=?',(rid,rid)).fetchone():
+            raise Conflict('This fighter has portal results. Correct the bout result in the member portal.')
+    if collection=='events' and clean is None and db.execute('SELECT 1 FROM bouts b JOIN bout_results r ON r.bout_id=b.id WHERE b.event_id=?',(rid,)).fetchone():
+        raise Conflict('An event with recorded results cannot be deleted.')
+
 def op_update(collection,rid,payload):
     table=COLLECTIONS[collection][0]
     try: rid=int(rid)
@@ -303,6 +318,7 @@ def op_update(collection,rid,payload):
     assigns=','.join(f'{c}=?' for c in clean)
     try:
         with rw_conn() as db:
+            _protect_portal_records(db,collection,rid,clean)
             cur=db.execute(f'UPDATE {table} SET {assigns} WHERE id=?',[*clean.values(),rid])
             if cur.rowcount==0: raise NotFound('not found')
             return dict(db.execute(f'SELECT * FROM {table} WHERE id=?',(rid,)).fetchone())
@@ -314,6 +330,7 @@ def op_delete(collection,rid):
     try: rid=int(rid)
     except (TypeError,ValueError): raise Invalid('invalid id')
     with rw_conn() as db:
+        _protect_portal_records(db,collection,rid)
         cur=db.execute(f'DELETE FROM {table} WHERE id=?',(rid,))
     if not cur.rowcount: raise NotFound('not found')
     return {'ok':True}
@@ -393,8 +410,25 @@ class Handler(SimpleHTTPRequestHandler):
         return True
 
     # -- GET ---------------------------------------------------------------
+    def _portal(self, path):
+        import portal
+        try:
+            data = self._read_json() if self.command in ('POST','PUT') else {}
+        except (Invalid, ValueError) as exc:
+            return self._json({'error':str(exc)},400)
+        status, payload, extra = portal.handle(DB, self.command, path.removeprefix('/api/portal/'), data, self.headers.get('Cookie',''), dict(self.headers), self.headers.get('Host','localhost'))
+        if isinstance(payload,bytes):
+            self.send_response(status)
+            self.send_header('Content-Length',str(len(payload)))
+            self.send_header('Cache-Control','no-store')
+            for key,value in extra.items():self.send_header(key,value)
+            self.end_headers();self.wfile.write(payload);return
+        self._json(payload,status,extra)
+
     def do_GET(self):
         path=urlsplit(self.path).path
+        if path.startswith('/api/portal/'):
+            return self._portal(path)
         if path.startswith('/api/admin/'):
             self._admin_get(path);return
         if path.startswith('/api/'):
@@ -432,6 +466,8 @@ class Handler(SimpleHTTPRequestHandler):
     # -- POST --------------------------------------------------------------
     def do_POST(self):
         path=urlsplit(self.path).path
+        if path.startswith('/api/portal/'):
+            return self._portal(path)
         if not path.startswith('/api/admin/'):
             self.send_error(404,'Not found');return
         rest=path.removeprefix('/api/admin/')
@@ -486,6 +522,8 @@ class Handler(SimpleHTTPRequestHandler):
     # -- PUT ---------------------------------------------------------------
     def do_PUT(self):
         path=urlsplit(self.path).path
+        if path.startswith('/api/portal/'):
+            return self._portal(path)
         if not path.startswith('/api/admin/'):
             self.send_error(404,'Not found');return
         rest=path.removeprefix('/api/admin/')
@@ -512,6 +550,8 @@ class Handler(SimpleHTTPRequestHandler):
     # -- DELETE ------------------------------------------------------------
     def do_DELETE(self):
         path=urlsplit(self.path).path
+        if path.startswith('/api/portal/'):
+            return self._portal(path)
         if not path.startswith('/api/admin/'):
             self.send_error(404,'Not found');return
         rest=path.removeprefix('/api/admin/')
@@ -535,6 +575,8 @@ if __name__=='__main__':
     args=parser.parse_args()
     initialize()
     migrate.run(DB)
+    from scripts.seed_portal_demo import seed_if_enabled
+    seed_if_enabled(DB)
     admin_state='ENABLED' if admin_credentials() else 'disabled (run scripts/set_admin_password.py)'
     public=args.host not in ('127.0.0.1','localhost')
     print(f'RFC server: http://{args.host}:{args.port}  (Ctrl+C to stop)')

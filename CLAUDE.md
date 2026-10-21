@@ -1,5 +1,25 @@
 # Instructions for Claude / IDE coding assistants
 
+Render stakeholder testing is configured in `render.yaml` with `RFC_DEMO_MODE=1` and an
+isolated ephemeral `RFC_DB_PATH`. Excel templates/upload preview/publication use `ranking_excel.py`;
+install `requirements.txt` for Excel support. Default startup without the demo flag does not
+provision dummy accounts. See [docs/RENDER_TESTING.md](docs/RENDER_TESTING.md) for deployment and user instructions.
+Existing v4 databases are not re-seeded during initialization, preserving portal edits and ranking
+omissions across process restarts on retained storage. No Render deployment was performed here.
+
+
+## Current update (2026-10-21)
+
+Read `docs/MEMBER_PORTAL.md` for the connected registration/event/results demo and go-live scope.
+`portal.py` and `public/portal.*` add role-based accounts; migration 004 adds schema v4.
+Use `RFC_DB_PATH` for an isolated development database and seed dummy accounts only with explicit
+`scripts/seed_portal_demo.py --local-demo`. Existing tracked database/assets were not replaced.
+Stored ranking positions, event cards and athlete fight history are now connected. Result
+corrections must use the portal's atomic accounting/audit path, not generic CMS record edits.
+Run `python -m unittest discover -s tests -v` as well as the existing project checker.
+Keep this guide and project docs current when implementing further changes.
+
+
 Read this file first, followed by `docs/PROJECT_INTENT.md`, `docs/ARCHITECTURE.md` and `docs/DATABASE.md`.
 
 ## Goal
@@ -16,7 +36,7 @@ Continue developing **RFC — Rumble Fighting Championship**, a responsive websi
 
 ## Stack and commands
 
-Vanilla HTML/CSS/JavaScript in `public/`. Standard-library Python server and SQLite. No npm build step or Python dependencies.
+Vanilla HTML/CSS/JavaScript in `public/`. Standard-library Python server and SQLite. No npm build step. Core site/member workflows use stdlib; install requirements.txt for Excel rankings and Gunicorn hosting.
 
 - Run: `python server.py` → http://localhost:8000
 - Checks: `python scripts/check_project.py`
@@ -27,7 +47,7 @@ Vanilla HTML/CSS/JavaScript in `public/`. Standard-library Python server and SQL
 
 The working database is `database/rfc.sqlite3`. Back it up before migrations. `database/schema.sql` is version 1, not a migration runner. Do not delete/recreate the database to change schema. Preserve user edits. The supplied initializer restores missing sample IDs; revise seeding before switching to real content.
 
-Athletes/events/stories/gallery items load from the API. Rankings currently derive their visual order from athlete division/order; the rankings table is prepared but not yet consumed by that view. Bouts, achievements, media_items and sponsors are also prepared and exposed as JSON but their frontend displays are not integrated. Do not claim these features are complete.
+Athletes/events/stories/gallery items load from the API. Rankings now read stored positions/movement. Event cards and athlete fight history use bouts/results. Achievements, media_items and sponsors remain prepared/API-exposed but are not integrated into their public displays. Do not claim those remaining features are complete.
 
 An optional, authentication-gated admin write API exists under `/api/admin/*` (see `docs/ARCHITECTURE.md`). It is **disabled by default** and stays off until a local password is set with `python scripts/set_admin_password.py` (writes `admin_config.json`, which is gitignored and must never live under `public/`). Organisers can CRUD athletes/events/bouts/rankings/achievements/sponsors, **upload athlete images** (admin-only, saved to `public/assets/athletes/`), and **bulk-import athletes from a CSV template**. The public content API remains read-only. All DB-derived text is escaped at render (`esc`) and URLs validated (`safeUrl` client-side, `v_url` server-side) — keep it that way for any new rendered field.
 

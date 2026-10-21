@@ -14,3 +14,7 @@
 .flip-hint{position:absolute;right:8px;bottom:8px;width:26px;height:26px;border-radius:50%;background:var(--gold);color:var(--black);font-size:14px;display:flex;align-items:center;justify-content:center;z-index:1}
 .athlete .text-link{margin-top:6px}
 @media(prefers-reduced-motion:reduce){.flip-inner{transition:none}}
+
+/* Keep the new member workspace reachable when the additional nav collapses. */
+.left-nav .member-portal-mobile{display:none}
+@media(max-width:1050px){.left-nav .member-portal-mobile{display:inline-flex}}

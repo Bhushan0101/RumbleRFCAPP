@@ -8,6 +8,9 @@ RFC_ADMIN_PASSWORD_HASH and RFC_ADMIN_SALT (see scripts/set_admin_password.py fo
 NOTE: on an ephemeral filesystem (Render free tier) admin edits and uploads reset on restart —
 the deployed admin is for demonstration; use a persistent disk / external DB for durable edits.
 
+The member portal /api/portal/ routes are shared with the local server; RFC_DEMO_MODE=1
+explicitly provisions stakeholder test accounts. RFC_DB_PATH selects runtime storage.
+
 Locally, prefer `python server.py` (zero dependencies). This file + gunicorn is for hosting.
 """
 import json
@@ -25,6 +28,8 @@ PUBLIC = ROOT / 'public'
 # Ensure the database exists and is migrated before the first request (safe + idempotent).
 initialize()
 migrate.run(DB)
+from scripts.seed_portal_demo import seed_if_enabled
+seed_if_enabled(DB)
 
 
 def _jb(payload):
@@ -152,6 +157,20 @@ def _static(path):
 def app(environ, start_response):
     path = environ.get('PATH_INFO', '/')
     method = environ.get('REQUEST_METHOD', 'GET')
+
+    if path.startswith('/api/portal/'):
+        import portal
+        from http import HTTPStatus
+        try:
+            data = json.loads(_body(environ).decode('utf-8')) if method in ('POST','PUT') else {}
+        except (S.Invalid, ValueError, UnicodeDecodeError):
+            return _respond(start_response, '400 Bad Request', _jb({'error':'Invalid JSON body'}))
+        headers = {'X-Requested-With':environ.get('HTTP_X_REQUESTED_WITH',''),
+                   'Origin':environ.get('HTTP_ORIGIN',''),
+                   'X-Forwarded-Proto':environ.get('HTTP_X_FORWARDED_PROTO','')}
+        status, payload, extra = portal.handle(S.DB,method,path[len('/api/portal/'):],data,
+            environ.get('HTTP_COOKIE',''),headers,environ.get('HTTP_HOST','localhost'))
+        return _respond(start_response, f'{status} {HTTPStatus(status).phrase}', payload if isinstance(payload,bytes) else _jb(payload), ctype=extra.pop('Content-Type','application/json; charset=utf-8'), extra=list(extra.items()))
 
     if path.startswith('/api/admin/'):
         try:

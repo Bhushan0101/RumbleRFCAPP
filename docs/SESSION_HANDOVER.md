@@ -1,6 +1,24 @@
 # RFC — Session Handover (pick up here next time)
 
-Last updated: 2026-10-20. This file is the fast path back into the project. Read it, then
+Render stakeholder testing is configured in `render.yaml` with `RFC_DEMO_MODE=1` and an
+isolated ephemeral `RFC_DB_PATH`. Excel templates/upload preview/publication use `ranking_excel.py`;
+install `requirements.txt` for Excel support. Default startup without the demo flag does not
+provision dummy accounts. See [RENDER_TESTING.md](RENDER_TESTING.md) for deployment and user instructions.
+Existing v4 databases are not re-seeded during initialization, preserving portal edits and ranking
+omissions across process restarts on retained storage. No Render deployment was performed here.
+
+
+## Member portal update — 2026-10-21
+
+A connected first-release demo is now implemented. See [MEMBER_PORTAL.md](MEMBER_PORTAL.md) for
+accounts, runtime database, registration/event/result workflows, tests and first go-live options.
+Schema v4 adds accounts and affiliations, promoter ownership, registrations and result auditing.
+Rankings now use stored positions; public events show registrations/cards and athlete profiles show
+bouts. This update supersedes older statements below about those features being unconnected.
+Dummy accounts are seeded by the explicit command or opt-in `RFC_DEMO_MODE=1` startup flag. No production deployment occurred.
+
+
+Last updated: 2026-10-21. This file is the fast path back into the project. Read it, then
 `CLAUDE.md` → `docs/ARCHITECTURE.md` → `docs/DATABASE.md` as needed.
 
 ## How to run
@@ -12,13 +30,13 @@ node --check public/app.js       # optional JS syntax check (and public/admin.js
 ```
 
 Admin panel: **http://localhost:8000/admin.html**. It is **disabled until a password is set**.
-Current local dev password is **`test123`** (stored only as a PBKDF2 hash in the gitignored
-`admin_config.json`; the real setup command is `python scripts/set_admin_password.py`, which
-enforces an 8-char minimum). `admin_config.json` is NOT committed — a fresh clone has admin off.
+Legacy CMS is disabled unless `admin_config.json` or its environment credentials are configured.
+For the connected demo use the member portal accounts in `docs/RENDER_TESTING.md`; the app admin
+is a separate role-based account, not the legacy CMS password.
 
 ## Current state (what's done)
 
-**Schema is at version 3** (`PRAGMA user_version=3`). Migrations live in `scripts/migrations/`,
+**Current schema is version 4** (the untouched shipped database may remain v3 until startup migration). Earlier baseline: version 3 (`PRAGMA user_version=3`). Migrations live in `scripts/migrations/`,
 applied by `scripts/migrate.py` (idempotent, version-gated). `database/schema.sql` stays the v1
 baseline; `init_db.initialize()` preserves a higher version so re-seeding never downgrades.
 Backup before migrating: `database/rfc.sqlite3.backup` exists.
@@ -43,8 +61,8 @@ Backup before migrating: `database/rfc.sqlite3.backup` exists.
   cartoon (back), plus a "CHAMPION" tag on the portrait. It also rebuilds `rankings` per division by
   record (wins desc). Re-run any time: `python scripts/seed_demo_fighters.py` (regenerates all images;
   champion = rankings position 1). Tune the roster/records by editing the `FIGHTERS` list at the top.
-- **Rankings** page reads athletes by division ordered by `display_order,id`; the `rankings` table is
-  seeded and ordered by record for the two focus divisions.
+- **Rankings** page now reads stored division/position/movement rows. App admins can edit positions
+  or preview/publish a validated Excel workbook. Fight records update independently from results.
 
 ## Feature flags — intentionally OFF (can re-enable)
 
@@ -75,7 +93,7 @@ Meta embed (would need a cloud dependency + account/token). Full detail + re-ena
   restart (ephemeral disk). Admin UI shows a "LIVE DEMO" banner on non-localhost hosts. For durable
   edits use a persistent disk / external DB, or edit locally and push.
 - **Local dev is unchanged and needs zero packages**: `python server.py` (full site + admin write API,
-  binds 127.0.0.1; local admin password is `test123` in the gitignored `admin_config.json`).
+  binds 127.0.0.1; legacy CMS credentials are optional and configured separately).
 - The `end_headers` override sends `Cache-Control: no-store` on static files so stale JS/CSS never
   causes a blank page (that was the earlier all-white bug — old cached `app.js`).
 - Render filesystem is ephemeral → admin writes/uploads don't persist; deployed site serves the

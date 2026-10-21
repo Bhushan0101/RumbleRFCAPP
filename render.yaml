@@ -1,12 +1,17 @@
-# Render deployment for the RFC concept site.
-# This runs the stdlib Python server (static files + read-only content API + optional admin).
-# Note: Render's filesystem is ephemeral, so admin writes and uploads do NOT persist across
-# deploys/restarts — the site serves the committed seeded demo content. For a purely static
-# deploy instead, publish the `public/` folder (it falls back to public/data/content.json).
+# Stakeholder TEST DEMO. Public dummy credentials; never use this mode for real member data.
+# Free-tier storage is ephemeral: edits and registrations reset after restart/redeploy.
 services:
   - type: web
     name: RFC-Championship
     runtime: python
     plan: free
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn main:app"
+    startCommand: "gunicorn main:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 60"
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: RFC_DEMO_MODE
+        value: "1"
+      - key: RFC_DB_PATH
+        value: /tmp/rfc-demo.sqlite3

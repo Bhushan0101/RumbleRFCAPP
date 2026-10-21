@@ -1,14 +1,25 @@
 """Create and seed the local database without replacing existing content."""
 import json
+import os
 import sqlite3
 import sys
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-DB = ROOT / 'database' / 'rfc.sqlite3'
+DB = Path(os.environ.get('RFC_DB_PATH', str(ROOT / 'database' / 'rfc.sqlite3'))).resolve()
 def initialize():
+    # An explicitly selected new runtime path starts from the shipped sample roster.
+    baseline=ROOT / 'database' / 'rfc.sqlite3'
+    if os.environ.get('RFC_DB_PATH') and DB==Path(os.environ['RFC_DB_PATH']).resolve() and DB!=baseline.resolve() and not DB.exists():
+        DB.parent.mkdir(parents=True,exist_ok=True)
+        with sqlite3.connect(f'{baseline.as_uri()}?mode=ro',uri=True) as source, sqlite3.connect(DB) as target:
+            source.backup(target)
     with sqlite3.connect(DB) as db:
         db.execute('PRAGMA foreign_keys=ON')
         prior = db.execute('PRAGMA user_version').fetchone()[0]
+        if prior >= 4:
+            # Portal content and uploaded rankings are user-managed; never restore seeds on restart.
+            print(f'Database ready: {DB}')
+            return
         db.executescript((ROOT / 'database' / 'schema.sql').read_text())
         # schema.sql ends with PRAGMA user_version=1 (the v1 baseline). On an already-migrated
         # database, keep the higher version so scripts/migrate.py does not re-run migrations.
