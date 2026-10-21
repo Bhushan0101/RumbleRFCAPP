@@ -380,9 +380,9 @@ class Handler(SimpleHTTPRequestHandler):
         c=SimpleCookie(self.headers.get('Cookie',''))
         return c['rfc_session'].value if 'rfc_session' in c else None
 
-    def _read_json(self):
+    def _read_json(self,max_length=1_000_000):
         length=int(self.headers.get('Content-Length',0) or 0)
-        if length<=0 or length>1_000_000:
+        if length<=0 or length>max_length:
             raise Invalid('missing or oversized body')
         try: return json.loads(self.rfile.read(length).decode('utf-8'))
         except (ValueError,UnicodeDecodeError): raise Invalid('body must be valid JSON')
@@ -413,7 +413,7 @@ class Handler(SimpleHTTPRequestHandler):
     def _portal(self, path):
         import portal
         try:
-            data = self._read_json() if self.command in ('POST','PUT') else {}
+            data = self._read_json(max_length=3_000_000) if self.command in ('POST','PUT') else {}
         except (Invalid, ValueError) as exc:
             return self._json({'error':str(exc)},400)
         status, payload, extra = portal.handle(DB, self.command, path.removeprefix('/api/portal/'), data, self.headers.get('Cookie',''), dict(self.headers), self.headers.get('Host','localhost'))

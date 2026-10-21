@@ -1,5 +1,17 @@
 # Instructions for Claude / IDE coding assistants
 
+## Current fighter / rankings UI update
+
+The current interface is black and white with saffron accents. The member portal uses its own
+centered stylesheet and ES modules under `public/portal/`. Fighter registration is a three-step
+journey with an optional portrait; only Featherweight and Lightweight are active. The directory is
+removed. Fighters see only their own gym; invitation codes connect gyms without exposing a directory.
+Migration 005 adds gym invitation codes and preserves existing data. Pillow validates uploaded photos.
+See [FIGHTER_JOURNEY.md](docs/FIGHTER_JOURNEY.md) for testing and [PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)
+for feature boundaries. Event/promotion/gym management is retained; this iteration prioritizes the
+fighter profile and portal rankings.
+
+
 Render stakeholder testing is configured in `render.yaml` with `RFC_DEMO_MODE=1` and an
 isolated ephemeral `RFC_DB_PATH`. Excel templates/upload preview/publication use `ranking_excel.py`;
 install `requirements.txt` for Excel support. Default startup without the demo flag does not
@@ -24,11 +36,11 @@ Read this file first, followed by `docs/PROJECT_INTENT.md`, `docs/ARCHITECTURE.m
 
 ## Goal
 
-Continue developing **RFC — Rumble Fighting Championship**, a responsive website inspired by the user's supplied UFC screenshots, using the supplied RFC logo and its green/gold palette. This is a working concept and portable local development handover, not an established live ticketing business platform.
+Continue developing **RFC — Rumble Fighting Championship**, a responsive website inspired by the user's supplied UFC screenshots, using the supplied RFC identity and the current black/white/saffron direction. This is a working concept and portable local development handover, not an established live ticketing business platform.
 
 ## Preserve
 
-- The user's RFC branding and overall UFC-inspired editorial structure.
+- The user's RFC identity, black/white/saffron palette and overall editorial structure.
 - Centred logo, white floating-style navigation, condensed uppercase headings, dark event blocks, athlete grids and feature-story layouts.
 - Responsive behaviour and accessible native dialogs, labelled controls, keyboard focus and reduced-motion support.
 - Clear sample-content labelling until real information is verified.
@@ -36,7 +48,7 @@ Continue developing **RFC — Rumble Fighting Championship**, a responsive websi
 
 ## Stack and commands
 
-Vanilla HTML/CSS/JavaScript in `public/`. Standard-library Python server and SQLite. No npm build step. Core site/member workflows use stdlib; install requirements.txt for Excel rankings and Gunicorn hosting.
+Vanilla HTML/CSS/JavaScript in `public/`. Standard-library Python server and SQLite. No npm build step. Core site/member workflows use stdlib; install requirements.txt for photo uploads, Excel rankings and Gunicorn hosting.
 
 - Run: `python server.py` → http://localhost:8000
 - Checks: `python scripts/check_project.py`

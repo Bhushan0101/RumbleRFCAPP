@@ -25,7 +25,7 @@ with tempfile.TemporaryDirectory() as tmp:
         assert db.execute('SELECT name FROM athletes WHERE id=1').fetchone()[0]=='Preserved edit'
         assert db.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
         assert db.execute('PRAGMA foreign_key_check').fetchall()==[]
-        assert db.execute('PRAGMA user_version').fetchone()[0]==4
+        assert db.execute('PRAGMA user_version').fetchone()[0]==5
         assert db.execute("SELECT count(*) FROM sqlite_master WHERE name IN('gallery_items','sessions')").fetchone()[0]==2
         assert db.execute('SELECT count(*) FROM gallery_items').fetchone()[0]==8
         assert 'cartoon_url' in [r[1] for r in db.execute('PRAGMA table_info(athletes)')]
@@ -66,6 +66,6 @@ for f in required:
     assert (ROOT/f).is_file(),f
 assert not (ROOT/'public/admin_config.json').exists(),'admin_config.json must never live under public/'
 
-print('PASS: integrity, foreign keys, migration to v4, seed idempotence/edit preservation, '
+print('PASS: integrity, foreign keys, migration to v5, seed idempotence/edit preservation, '
       'athlete cartoon column, gallery content, feature flags, API contract, URL/enum/image validation, '
       'static fallback structure and required files.')

@@ -1,5 +1,17 @@
 # RFC — Rumble Fighting Championship
 
+## Current fighter / rankings UI update
+
+The current interface is black and white with saffron accents. The member portal uses its own
+centered stylesheet and ES modules under `public/portal/`. Fighter registration is a three-step
+journey with an optional portrait; only Featherweight and Lightweight are active. The directory is
+removed. Fighters see only their own gym; invitation codes connect gyms without exposing a directory.
+Migration 005 adds gym invitation codes and preserves existing data. Pillow validates uploaded photos.
+See [FIGHTER_JOURNEY.md](docs/FIGHTER_JOURNEY.md) for testing and [PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)
+for feature boundaries. Event/promotion/gym management is retained; this iteration prioritizes the
+fighter profile and portal rankings.
+
+
 ## New: connected member portal demo
 
 Use **Member portal** in the site navigation for fighter/gym/coach registration, independent
@@ -21,7 +33,7 @@ can reset on restart/redeploy. No deployment was performed here.
 
 ## Run in your IDE
 
-Requires **Python 3.10+**. The public site and basic member portal need no pip packages, Node, API keys or paid services. For Excel ranking uploads and Render hosting, first run `python -m pip install -r requirements.txt`.
+Requires **Python 3.10+**. The public site and basic member portal need no pip packages, Node, API keys or paid services. For fighter photo uploads, Excel ranking uploads and Render hosting, first run `python -m pip install -r requirements.txt`.
 
 ```sh
 python server.py
@@ -100,7 +112,7 @@ Python settings work with no dashboard changes:
 - Build command: `pip install -r requirements.txt`
 - Start command: `gunicorn main:app`  (Render's default — serves `public/` + the read-only JSON API)
 
-`requirements.txt` includes Gunicorn for hosting and openpyxl/defusedxml for Excel ranking uploads. **The public site and basic local portal still need zero packages** — run `python server.py` for the full site including the admin write API. The deployed WSGI app (`main.py`) serves the public content API, the authenticated member portal,
+`requirements.txt` includes Gunicorn for hosting and openpyxl/defusedxml for Excel ranking uploads, and Pillow for fighter photos. **The public site and basic local portal still need zero packages** — run `python server.py` for the full site including the admin write API. The deployed WSGI app (`main.py`) serves the public content API, the authenticated member portal,
 and the optional legacy admin API. Public content reads remain read-only; authenticated routes handle writes.
 
 Render's filesystem is **ephemeral**, so admin writes and uploaded images do **not** persist across

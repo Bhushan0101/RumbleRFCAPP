@@ -6,6 +6,7 @@ import io
 import json
 import zipfile
 from portal import Error, require, rows
+from portal_features.categories import CATEGORIES
 
 MAX_BYTES=512*1024
 COLUMNS=('athlete_id','name','division','position')
@@ -23,16 +24,16 @@ def template(db,user):
     xlsx=workbook_tools()
     book=xlsx.Workbook();sheet=book.active;sheet.title='Rankings'
     sheet.append(COLUMNS)
-    for row in db.execute('SELECT a.id,a.name,r.division,r.position FROM rankings r JOIN athletes a ON a.id=r.athlete_id ORDER BY r.division,r.position'):
+    for row in db.execute('SELECT a.id,a.name,r.division,r.position FROM rankings r JOIN athletes a ON a.id=r.athlete_id WHERE r.division IN (?,?) ORDER BY r.division,r.position',CATEGORIES):
         sheet.append(tuple(row))
     for row in sheet.iter_rows(min_row=2):
         for cell in row[1:3]:cell.data_type='s'
     sheet.freeze_panes='A2';sheet.auto_filter.ref=sheet.dimensions
     for col,width in [('A',16),('B',32),('C',24),('D',16)]:sheet.column_dimensions[col].width=width
-    for cell in sheet[1]:cell.font=xlsx.styles.Font(bold=True,color='FFFFFF');cell.fill=xlsx.styles.PatternFill('solid',fgColor='123C2B')
+    for cell in sheet[1]:cell.font=xlsx.styles.Font(bold=True,color='FFFFFF');cell.fill=xlsx.styles.PatternFill('solid',fgColor='181818')
     reference=book.create_sheet('Fighters')
     reference.append(('athlete_id','name','division','current_position'))
-    for row in db.execute('SELECT a.id,a.name,a.division,r.position FROM athletes a LEFT JOIN rankings r ON r.athlete_id=a.id AND r.division=a.division ORDER BY a.division,a.name'):
+    for row in db.execute('SELECT a.id,a.name,a.division,r.position FROM athletes a LEFT JOIN rankings r ON r.athlete_id=a.id AND r.division=a.division WHERE a.division IN (?,?) ORDER BY a.division,a.name',CATEGORIES):
         reference.append(tuple(row))
     for row in reference.iter_rows(min_row=2):
         for cell in row[1:3]:cell.data_type='s'
@@ -41,6 +42,7 @@ def template(db,user):
     instructions=book.create_sheet('Instructions')
     for line in [
         'RFC rankings upload — demo / sample data',
+        'Active categories: Featherweight and Lightweight only.',
         'Edit the Rankings sheet only. Keep athlete_id, name, division, position headers.',
         'Use existing athlete IDs from the Fighters reference sheet. Name and division must match that athlete.',
         'Each represented division replaces that entire division ranking. Omitted divisions stay unchanged.',
@@ -97,6 +99,8 @@ def import_rankings(db,user,data):
             if not isinstance(name,str) or name.strip()!=athlete['name'] or not isinstance(division,str) or division.strip()!=athlete['division']:
                 errors.append(f'Row {index}: name and division must match athlete {aid}');continue
             division=division.strip()
+            if division not in CATEGORIES:
+                errors.append(f'Row {index}: only Featherweight and Lightweight are active');continue
             if isinstance(position,bool) or not isinstance(position,(int,float)) or position!=int(position) or not 1<=position<=2000:
                 errors.append(f'Row {index}: position must be a whole number from 1 to 2000');continue
             position=int(position)

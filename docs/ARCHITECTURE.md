@@ -1,5 +1,17 @@
 # Architecture
 
+## Current fighter / rankings UI update
+
+The current interface is black and white with saffron accents. The member portal uses its own
+centered stylesheet and ES modules under `public/portal/`. Fighter registration is a three-step
+journey with an optional portrait; only Featherweight and Lightweight are active. The directory is
+removed. Fighters see only their own gym; invitation codes connect gyms without exposing a directory.
+Migration 005 adds gym invitation codes and preserves existing data. Pillow validates uploaded photos.
+See [FIGHTER_JOURNEY.md](FIGHTER_JOURNEY.md) for testing and [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)
+for feature boundaries. Event/promotion/gym management is retained; this iteration prioritizes the
+fighter profile and portal rankings.
+
+
 Render stakeholder testing is configured in `render.yaml` with `RFC_DEMO_MODE=1` and an
 isolated ephemeral `RFC_DB_PATH`. Excel templates/upload preview/publication use `ranking_excel.py`;
 install `requirements.txt` for Excel support. Default startup without the demo flag does not

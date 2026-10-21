@@ -65,12 +65,12 @@ def _cookie_token(environ):
     return c['rfc_session'].value if 'rfc_session' in c else None
 
 
-def _body(environ):
+def _body(environ,max_length=2_000_000):
     try:
         length = int(environ.get('CONTENT_LENGTH', 0) or 0)
     except ValueError:
         length = 0
-    if length <= 0 or length > 2_000_000:
+    if length <= 0 or length > max_length:
         raise S.Invalid('missing or oversized body')
     return environ['wsgi.input'].read(length)
 
@@ -162,7 +162,7 @@ def app(environ, start_response):
         import portal
         from http import HTTPStatus
         try:
-            data = json.loads(_body(environ).decode('utf-8')) if method in ('POST','PUT') else {}
+            data = json.loads(_body(environ,max_length=3_000_000).decode('utf-8')) if method in ('POST','PUT') else {}
         except (S.Invalid, ValueError, UnicodeDecodeError):
             return _respond(start_response, '400 Bad Request', _jb({'error':'Invalid JSON body'}))
         headers = {'X-Requested-With':environ.get('HTTP_X_REQUESTED_WITH',''),

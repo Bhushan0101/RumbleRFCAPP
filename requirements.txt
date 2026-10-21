@@ -1,5 +1,6 @@
-# Local public/member workflows use stdlib Python. Excel rankings import needs openpyxl.
+# Core public/member workflows use stdlib; photo uploads use Pillow, Excel uses openpyxl.
 # Gunicorn serves the WSGI app on Render; defusedxml hardens workbook XML parsing.
 gunicorn>=23.0,<24
 openpyxl>=3.1.5,<4
 defusedxml>=0.7.1,<1
+Pillow>=11.0,<13

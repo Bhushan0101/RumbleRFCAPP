@@ -33,7 +33,10 @@ class PortalTests(unittest.TestCase):
         public=self.call('state')[1]
         self.assertIsNone(public['user']);self.assertNotIn('users',public)
         f=next(f for f in public['fighters'] if f['name']=='Demo Alex Fighter')
-        self.assertTrue(f['gym_id']);self.assertTrue(f['coach_id'])
+        self.assertIsNone(f['gym_id']);self.assertIsNone(f['coach_id'])
+        self.assertEqual(public['gyms'],[]);self.assertEqual(public['coaches'],[])
+        own=next(a for a in self.call('state',role='fighter')[1]['fighters'] if a['id']==f['id'])
+        self.assertTrue(own['gym_id']);self.assertTrue(own['coach_id'])
         for role in ('fighter','gym','coach'):
             self.assertIn(f['id'],self.call('state',role=role)[1]['team'])
         self.assertEqual(len(self.call('state',role='admin')[1]['users']),5)
@@ -95,11 +98,11 @@ class PortalTests(unittest.TestCase):
         fighter=next(f for f in self.call('state')[1]['fighters'] if f['name']=='Demo Alex Fighter')
         self.assertIsNone(fighter['gym_id']);self.assertIsNone(fighter['coach_id'])
         self.assertNotIn(fighter['id'],self.call('state',role='gym')[1]['team'])
-        state=self.call('state')[1]
-        self.assertEqual(self.call('profile','PUT',{'gym_id':state['gyms'][0]['id'],'coach_id':state['coaches'][0]['id']},'fighter')[0],200)
+        state=self.call('state',role='gym')[1]
+        self.assertEqual(self.call('profile','PUT',{'gym_code':state['organization'][0]['join_code'],'coach_id':state['coaches'][0]['id']},'fighter')[0],200)
         self.assertIn(fighter['id'],self.call('state',role='gym')[1]['team'])
         self.assertEqual(self.call('profile','PUT',{'organization':'Renamed demo gym','city':'Cork'},'gym')[0],200)
-        self.assertEqual(self.call('state')[1]['gyms'][0]['city'],'Cork')
+        self.assertEqual(self.call('state',role='fighter')[1]['gyms'][0]['city'],'Cork')
 
     def test_legacy_editor_preserves_result_accounting(self):
         import server
@@ -244,5 +247,84 @@ class ExcelRankingTests(unittest.TestCase):
         try:init_db.initialize()
         finally:init_db.DB=previous
         self.assertEqual(self.call('state')[1]['rankings'],after, 'Startup must not restore removed ranking seeds')
+
+class FighterJourneyTests(unittest.TestCase):
+    setUp=PortalTests.setUp
+    tearDown=PortalTests.tearDown
+    call=PortalTests.call
+
+    def test_category_validation_and_own_profile(self):
+        payload={'role':'fighter','name':'Invalid category','email':'invalid@test.test','password':'LongPassword123','country':'Ireland','division':'Welterweight'}
+        self.assertEqual(self.call('register','POST',payload)[0],400)
+        with sqlite3.connect(self.path) as db:self.assertEqual(db.execute('SELECT count(*) FROM portal_users WHERE email=?',(payload['email'],)).fetchone()[0],0)
+        before=self.call('state',role='fighter')[1]
+        aid=before['profile'][0]['athlete_id']
+        self.assertEqual(self.call('profile','PUT',{'name':'Updated Fighter','nickname':'Corner','country':'India','division':'Featherweight','biography':'My training story','wins':999},'fighter')[0],200)
+        after=self.call('state',role='fighter')[1]
+        fighter=next(f for f in after['fighters'] if f['id']==aid)
+        self.assertEqual(fighter['wins'],0);self.assertEqual(fighter['division'],'Featherweight')
+        self.assertEqual(after['user']['name'],'Updated Fighter')
+        self.assertEqual(self.call('profile','PUT',{'division':'Welterweight'},'fighter')[0],400)
+        self.assertEqual(self.call('profile','PUT',{'name':'Intruder'},None)[0],401)
+
+    def test_only_own_gym_is_exposed_and_invitation_connects(self):
+        payload={'role':'gym','name':'Other owner','organization':'Other private gym','city':'London','email':'private@test.test','password':'LongPassword123'}
+        self.assertEqual(self.call('register','POST',payload)[0],200)
+        fighter=self.call('state',role='fighter')[1]
+        self.assertEqual([g['name'] for g in fighter['gyms']],['Demo Emerald Gym'])
+        self.assertEqual(self.call('state')[1]['gyms'],[])
+        other=next(g for g in self.call('state',role='admin')[1]['gyms'] if g['name']=='Other private gym')
+        self.assertEqual(self.call('profile','PUT',{'gym_id':other['id'],'coach_id':''},'fighter')[0],400)
+        code=self.call('state',role='gym')[1]['organization'][0]['join_code']
+        status,lookup,_=self.call('gym/lookup','POST',{'code':code.lower()})
+        self.assertEqual(status,200);self.assertEqual(lookup['gym']['name'],'Demo Emerald Gym')
+        self.assertEqual(self.call('gym/lookup','POST',{'code':'NOTREAL1'})[0],404)
+        self.assertEqual(self.call('profile','PUT',{'gym_code':'','coach_id':''},'fighter')[0],200)
+        self.assertEqual(self.call('state',role='fighter')[1]['gyms'],[])
+        self.assertEqual(self.call('profile','PUT',{'gym_code':code,'coach_id':lookup['coaches'][0]['id']},'fighter')[0],200)
+        self.assertEqual(len(self.call('state',role='fighter')[1]['gyms']),1)
+
+    def test_photo_is_validated_owned_and_reencoded(self):
+        import base64,io
+        from pathlib import Path
+        from PIL import Image
+        from portal_features import media
+        original=media.UPLOAD_DIR;media.UPLOAD_DIR=Path(self.tmp.name)/'photos'
+        try:
+            buffer=io.BytesIO();Image.new('RGB',(80,100),'white').save(buffer,'PNG')
+            encoded=base64.b64encode(buffer.getvalue()).decode()
+            self.assertEqual(self.call('profile/photo','PUT',{'file':encoded},None)[0],401)
+            self.assertEqual(self.call('profile/photo','PUT',{'file':encoded},'promoter')[0],403)
+            for raw in (b'<svg><script>alert(1)</script></svg>',b'not an image'):
+                self.assertEqual(self.call('profile/photo','PUT',{'file':base64.b64encode(raw).decode()},'fighter')[0],400)
+            self.assertEqual(self.call('profile/photo','PUT',{'file':'bad base64!'},'fighter')[0],400)
+            status,result,_=self.call('profile/photo','PUT',{'file':encoded,'athlete_id':1},'fighter')
+            self.assertEqual(status,200);self.assertTrue(result['url'].endswith('.jpg'))
+            files=list(media.UPLOAD_DIR.glob('*.jpg'));self.assertEqual(len(files),1)
+            with Image.open(files[0]) as normalized:self.assertEqual(normalized.format,'JPEG')
+            state=self.call('state',role='fighter')[1]
+            own=next(f for f in state['fighters'] if f['id']==state['profile'][0]['athlete_id'])
+            self.assertEqual(own['portrait_url'],result['url'])
+            self.assertEqual(next(f for f in state['fighters'] if f['id']==1)['portrait_url'],None)
+            self.assertEqual(self.call('profile/photo','PUT',{'file':None},'fighter')[0],200)
+        finally:media.UPLOAD_DIR=original
+
+    def test_rankings_and_excel_use_only_active_categories(self):
+        import base64,io,openpyxl
+        state=self.call('state')[1]
+        self.assertEqual(state['categories'],['Featherweight','Lightweight'])
+        self.assertTrue(all(r['division'] in state['categories'] for r in state['rankings']))
+        status,raw,_=self.call('rankings/template',role='admin');self.assertEqual(status,200)
+        book=openpyxl.load_workbook(io.BytesIO(raw))
+        self.assertTrue(all(row[2] in state['categories'] for row in book['Rankings'].iter_rows(min_row=2,values_only=True)))
+        self.assertTrue(all(row[2] in state['categories'] for row in book['Fighters'].iter_rows(min_row=2,values_only=True)))
+        with sqlite3.connect(self.path) as db:
+            legacy=db.execute("SELECT id FROM athletes WHERE division='Welterweight' LIMIT 1").fetchone()[0]
+            count=db.execute("SELECT count(*) FROM rankings WHERE division='Welterweight'").fetchone()[0]
+        self.assertGreater(count,0)
+        self.assertEqual(self.call('rankings','PUT',{'athlete_id':legacy,'position':1},'admin')[0],400)
+        book['Rankings']['C2']='Welterweight'
+        buffer=io.BytesIO();book.save(buffer)
+        self.assertEqual(self.call('rankings/import','POST',{'file':base64.b64encode(buffer.getvalue()).decode()},'admin')[0],400)
 
 if __name__=='__main__':unittest.main()

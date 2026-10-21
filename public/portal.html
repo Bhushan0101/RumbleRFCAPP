@@ -1,3 +1,53 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#123c2b"><title>Member portal | RFC</title><link rel="stylesheet" href="style.css"><link rel="stylesheet" href="portal.css"></head>
-<body class="portal"><div class="utility"><span>RUMBLE FIGHTING CHAMPIONSHIP</span><span>DEMO WORKSPACE · SAMPLE DATA</span></div><header class="portal-header"><a href="index.html" class="portal-brand">RFC <small>MEMBER PORTAL</small></a><nav aria-label="Portal navigation"><a href="index.html#rankings">Rankings ↗</a><a href="#events">Events</a><a href="#directory">Directory</a><a href="#account" id="account-link">Sign in / Register</a></nav></header><main class="portal-shell"><div id="notice" role="status" aria-live="polite"></div><div id="portal-app"><p>Loading the member workspace…</p></div></main><footer class="portal-footer">RFC development demo · All accounts, events and affiliations are samples. No payments or verified sporting records.</footer><script src="portal.js"></script></body></html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#161616" />
+    <meta
+      name="description"
+      content="Your RFC fighter profile, category rankings and next fight."
+    />
+    <title>Member portal | RFC</title>
+    <link rel="stylesheet" href="portal.css" />
+  </head>
+  <body class="portal">
+    <div class="topbar">
+      <div class="container">
+        <span>RUMBLE FIGHTING CHAMPIONSHIP</span
+        ><a href="index.html">Back to RFC website ↗</a>
+      </div>
+    </div>
+    <header class="portal-header">
+      <div class="container nav-shell">
+        <a href="#rankings" class="wordmark" aria-label="RFC member portal"
+          >RFC<span>.</span><small>MEMBER PORTAL</small></a
+        >
+        <nav id="portal-navigation" aria-label="Member portal"></nav>
+        <div class="account-controls" id="account-controls"></div>
+      </div>
+    </header>
+    <main class="container portal-shell" id="main-content">
+      <div class="demo-banner" id="demo-banner" hidden>
+        <span class="demo-dot"></span>Stakeholder preview<span
+          class="demo-divider"
+          >/</span
+        >Sample data. Changes may reset after a redeploy.
+      </div>
+      <div id="notice" role="status" aria-live="polite"></div>
+      <div id="portal-app">
+        <div class="loading-state">
+          <span class="loading-dot"></span>Getting your corner ready…
+        </div>
+      </div>
+    </main>
+    <footer class="portal-footer">
+      <div class="container">
+        <a href="index.html" class="wordmark">RFC<span>.</span></a
+        ><span>BUILT FOR THE NEXT CHAPTER.</span>
+        <p>Development preview · Sample athletes and events.</p>
+      </div>
+    </footer>
+    <script type="module" src="portal.js"></script>
+  </body>
+</html>
