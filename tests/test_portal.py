@@ -10,6 +10,9 @@ from scripts.seed_portal_demo import seed
 
 class PortalTests(unittest.TestCase):
     def setUp(self):
+        from unittest.mock import patch
+        self.environment=patch.dict('os.environ',{'WUCO_DEMO_MODE':'1','WUCO_PAYMENT_MODE':'demo'})
+        self.environment.start();self.addCleanup(self.environment.stop)
         self.tmp=tempfile.TemporaryDirectory()
         self.path=Path(self.tmp.name)/'test.sqlite3'
         previous=init_db.DB
@@ -19,7 +22,7 @@ class PortalTests(unittest.TestCase):
         seed(self.path)
         self.cookies={}
         for role in ('admin','promoter','fighter','gym','coach'):
-            status,_,headers=self.call('login','POST',{'email':role+'@demo.rfc.test','password':'RfcDemo2026!'})
+            status,_,headers=self.call('login','POST',{'email':role+'@demo.wuco.test','password':'WucoDemo2026!'})
             self.assertEqual(status,200)
             self.cookies[role]=headers['Set-Cookie'].split(';')[0]
         self.state=self.call('state',role='promoter')[1]
@@ -72,21 +75,24 @@ class PortalTests(unittest.TestCase):
         self.assertEqual((record(red),record(blue)),initial)
     def test_registration_card_and_rollback(self):
         aid=self.bout['red_athlete_id']
-        self.assertEqual(self.call(f'events/{self.event}/register','POST',{'athlete_id':aid},'fighter')[0],409)
+        self.assertEqual(self.call(f'events/{self.event}/register','POST',{'athlete_id':aid,'acknowledged':True},'fighter')[0],409)
         unrelated=self.state['fighters'][0]['id']
-        self.assertEqual(self.call(f'events/{self.event}/register','POST',{'athlete_id':unrelated},'fighter')[0],403)
-        before=len(self.call('state')[1]['fighters'])
+        self.assertEqual(self.call(f'events/{self.event}/register','POST',{'athlete_id':unrelated,'acknowledged':True},'fighter')[0],403)
+        before=len(self.call('state',role='admin')[1]['fighters'])
         self.assertEqual(self.call(f'events/{self.event}/register','POST',{'outside':True,'name':'Guest','division':'Lightweight','country':'Ireland'},'promoter')[0],200)
-        self.assertEqual(len(self.call('state')[1]['fighters']),before+1)
+        self.assertEqual(len(self.call('state',role='admin')[1]['fighters']),before+1)
         self.assertEqual(self.call(f'events/{self.event}/bouts','POST',{'red_athlete_id':aid,'blue_athlete_id':aid},'promoter')[0],400)
         event=dict(self.state['events'][0]);event['registration_open']=0
         self.assertEqual(self.call(f'events/{self.event}','PUT',event,'promoter')[0],200)
         self.assertEqual(self.call(f'events/{self.event}/register','POST',{'outside':True,'name':'Closed','division':'Lightweight','country':'Ireland'},'promoter')[0],409)
-        self.assertEqual(len(self.call('state')[1]['fighters']),before+1)
+        self.assertEqual(len(self.call('state',role='admin')[1]['fighters']),before+1)
     def test_independent_registration_and_rankings(self):
         payload={'role':'fighter','name':'Independent','email':'solo@test.test','password':'LongPassword123','country':'Ireland','division':'Lightweight'}
         self.assertEqual(self.call('register','POST',payload)[0],200)
-        aid=next(f['id'] for f in self.call('state')[1]['fighters'] if f['name']=='Independent')
+        aid=next(f['id'] for f in self.call('state',role='admin')[1]['fighters'] if f['name']=='Independent')
+        payment=self.call(f'applications/{aid}/checkout','POST',{},'admin')[1]['payment_id']
+        self.assertEqual(self.call(f'payments/{payment}/demo-confirm','POST',{'confirm':True},'admin')[0],200)
+        self.assertEqual(self.call(f'fighters/{aid}/review','PUT',{'decision':'approved'},'admin')[0],200)
         self.assertEqual(self.call('rankings','PUT',{'athlete_id':aid,'position':1},'admin')[0],200)
         rankings=[r for r in self.call('state')[1]['rankings'] if r['division']=='Lightweight']
         self.assertEqual(rankings[0]['athlete_id'],aid)
@@ -143,7 +149,7 @@ class TransportTests(unittest.TestCase):
                 def start(status,headers):response.update(status=status,headers=dict(headers))
                 result=json.loads(b''.join(main.app(environ,start)))
                 return response,result
-            response,data=request('login','POST',{'email':'promoter@demo.rfc.test','password':'RfcDemo2026!'})
+            response,data=request('login','POST',{'email':'promoter@demo.wuco.test','password':'WucoDemo2026!'})
             self.assertEqual(response['status'],'200 OK')
             cookie=response['headers']['Set-Cookie'].split(';')[0]
             response,data=request('state',cookie=cookie)
@@ -165,7 +171,7 @@ class TransportTests(unittest.TestCase):
         try:
             base=f'http://127.0.0.1:{httpd.server_port}'
             opener=urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
-            request=urllib.request.Request(base+'/api/portal/login',data=json.dumps({'email':'fighter@demo.rfc.test','password':'RfcDemo2026!'}).encode(),headers={'Content-Type':'application/json','X-Requested-With':'fetch'})
+            request=urllib.request.Request(base+'/api/portal/login',data=json.dumps({'email':'fighter@demo.wuco.test','password':'WucoDemo2026!'}).encode(),headers={'Content-Type':'application/json','X-Requested-With':'fetch'})
             with opener.open(request) as response:self.assertEqual(response.status,200)
             with opener.open(base+'/api/portal/state') as response:
                 self.assertEqual(json.load(response)['user']['role'],'fighter')

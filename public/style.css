@@ -26,3 +26,7 @@
 .hero-image,.poster>img,.feature-photo,.media-card>img,.about-grid>img,.logo-window img,.flip-face img{filter:grayscale(1)}
 .dark-section,.join-banner,.join-banner:before{background-color:#171717}
 footer{background:#111;color:#eee}
+/* W.U.C.O identity replaces the archived RFC logo image. */
+.wuco-wordmark{display:block;font-family:Arial,sans-serif;font-size:27px;font-weight:900;letter-spacing:-1.5px;color:#171717;white-space:nowrap}
+.brand-plaque{display:grid;place-items:center;background:#171717;color:#fff;min-height:320px;font:900 clamp(38px,6vw,76px) Arial,sans-serif;letter-spacing:-3px;border-bottom:5px solid #ee8b26}
+@media(max-width:760px){.wuco-wordmark{font-size:23px}.footer-top .wordmark{font-size:38px}}

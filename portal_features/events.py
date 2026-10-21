@@ -1,7 +1,7 @@
 """Promotion-owned events, participant entries, published cards and result accounting."""
 import json
 import re
-from datetime import datetime
+from datetime import datetime,timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from portal import Error,one,require,number,text,create_athlete,snapshot
 from .categories import category
@@ -14,27 +14,51 @@ def owned_event(db, user, event_id):
     return event
 
 def event_data(data):
-    clean = {'title':text(data,'title'), 'subtitle':text(data,'subtitle'), 'venue':text(data,'venue',160,False),
-             'city':text(data,'city',120,False), 'description':text(data,'description',4000,False)}
-    clean['status'] = data.get('status','Upcoming')
-    if clean['status'] not in ('Upcoming','Past'):
-        raise Error('Invalid event status')
-    clean['timezone'] = text(data,'timezone',60)
-    try:
-        ZoneInfo(clean['timezone'])
-    except ZoneInfoNotFoundError:
-        raise Error('Choose a valid IANA timezone')
-    starts = text(data,'starts_at',40,False)
-    if starts:
-        try:
-            datetime.fromisoformat(starts)
-        except ValueError:
-            raise Error('Enter a valid event date/time')
-    clean['starts_at'] = starts or None
-    if data.get('registration_open',0) not in (0,1):
-        raise Error('Invalid registration setting')
-    clean['registration_open'] = int(data.get('registration_open',0))
+    clean={'title':text(data,'title'),'subtitle':text(data,'subtitle'),'venue':text(data,'venue',160,False),
+        'city':text(data,'city',120,False),'description':text(data,'description',4000,False)}
+    clean['status']=data.get('status','Upcoming')
+    if clean['status'] not in ('Upcoming','Past'):raise Error('Invalid event status')
+    clean['timezone']=text(data,'timezone',60)
+    try:ZoneInfo(clean['timezone'])
+    except ZoneInfoNotFoundError:raise Error('Choose a valid IANA timezone')
+    for key in ('starts_at','registration_closes_at'):
+        value=text(data,key,40,False)
+        if value:
+            try:datetime.fromisoformat(value)
+            except ValueError:raise Error('Enter a valid date and time')
+        clean[key]=value or None
+    if data.get('registration_open',0) not in (0,1):raise Error('Invalid registration setting')
+    clean['registration_open']=int(data.get('registration_open',0))
+    capacity=data.get('capacity')
+    clean['capacity']=number(capacity) if capacity not in ('',None) else None
+    if clean['capacity'] and clean['capacity']>10000:raise Error('Capacity must be at most 10,000 fighters')
+    categories=data.get('categories',list(('Featherweight','Lightweight')))
+    if isinstance(categories,str):
+        try:categories=json.loads(categories)
+        except ValueError:raise Error('Choose valid event categories')
+    if not isinstance(categories,list) or not categories or any(c not in ('Featherweight','Lightweight') for c in categories):raise Error('Choose at least one supported event category')
+    clean['categories']=json.dumps(list(dict.fromkeys(categories)))
     return clean
+
+def event_instant(value,zone):
+    moment=datetime.fromisoformat(value)
+    if moment.tzinfo is None:moment=moment.replace(tzinfo=ZoneInfo(zone))
+    return moment.astimezone(timezone.utc)
+
+def availability(db,event):
+    count=db.execute("SELECT count(*) FROM event_registrations WHERE event_id=? AND status='confirmed'",(event['id'],)).fetchone()[0]
+    reason=''
+    if event['status']!='Upcoming':reason='This event has finished.'
+    elif not event['registration_open']:reason='Registration is closed.'
+    elif event.get('starts_at') and event_instant(event['starts_at'],event['timezone'])<=datetime.now(timezone.utc):reason='This event has already started.'
+    elif event.get('registration_closes_at') and event_instant(event['registration_closes_at'],event['timezone'])<=datetime.now(timezone.utc):reason='The registration deadline has passed.'
+    elif event.get('capacity') and count>=event['capacity']:reason='This event is full.'
+    return {'open':not bool(reason),'reason':reason,'remaining':max(0,event['capacity']-count) if event.get('capacity') else None,'registered_count':count}
+
+def entry_authorized(db,user,eid,aid):
+    require(user,'admin','promoter','fighter','gym','coach')
+    if user['role'] in ('promoter','admin'):owned_event(db,user,eid)
+    elif aid not in snapshot(db,user)['team']:raise Error('Only register yourself or your affiliated fighters',403)
 
 def record_result(db, user, bout_id, data):
     bout = one(db,'SELECT * FROM bouts WHERE id=?',(bout_id,))
@@ -85,35 +109,56 @@ def dispatch_event(db,user,method,path,data):
         db.execute(f'UPDATE events SET {",".join(k+"=?" for k in clean)} WHERE id=?',(*clean.values(),eid))
         return {'ok':True}
     if method=='POST' and len(parts)==3 and parts[0]=='events' and parts[2]=='register':
-        eid=number(parts[1])
-        event=one(db,'SELECT * FROM events WHERE id=?',(eid,))
+        from .applications import require_approved
+        eid=number(parts[1]);event=one(db,'SELECT * FROM events WHERE id=?',(eid,))
         require(user,'admin','promoter','fighter','gym','coach')
-        if not event['registration_open'] or event['status']!='Upcoming':
-            raise Error('Registration is closed',409)
-        if user['role'] in ('promoter','admin'):
+        available=availability(db,event)
+        if not available['open']:raise Error(available['reason'],409)
+        if data.get('outside') is True:
             owned_event(db,user,eid)
-            if data.get('outside') is True:
-                aid=create_athlete(db,data)
-                db.execute('INSERT INTO fighter_profiles(athlete_id) VALUES(?)',(aid,))
-            else:
-                aid=number(data.get('athlete_id'))
+            aid=create_athlete(db,data)
+            db.execute("INSERT INTO fighter_profiles(athlete_id,approval_status,legacy_member,created_by) VALUES(?,'awaiting_payment',0,?)",(aid,user['id']))
+            db.execute("INSERT INTO application_audit(athlete_id,actor_id,action) VALUES(?,?,'guest_application_created')",(aid,user['id']))
+            return {'athlete_id':aid,'application_pending':True,'message':'Guest application created. Pay the application fee and obtain administrator approval before adding the entry.'}
+        aid=number(data.get('athlete_id'));entry_authorized(db,user,eid,aid)
+        require_approved(db,aid)
+        athlete=one(db,'SELECT division FROM athletes WHERE id=?',(aid,))
+        if athlete['division'] not in json.loads(event['categories']):raise Error('This event does not accept the fighter category',409)
+        if data.get('acknowledged') is not True:raise Error('Confirm the event registration details first')
+        existing=db.execute('SELECT * FROM event_registrations WHERE event_id=? AND athlete_id=?',(eid,aid)).fetchone()
+        if existing and existing['status']=='confirmed':raise Error('This fighter is already registered',409)
+        if existing:
+            rid=existing['id'];reference=existing['registration_ref']
+            db.execute("UPDATE event_registrations SET status='confirmed',added_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",(user['id'],rid))
         else:
-            aid=number(data.get('athlete_id'))
-            if aid not in snapshot(db,user)['team']:
-                raise Error('Only register yourself or your affiliated fighters',403)
-        one(db,'SELECT id FROM athletes WHERE id=?',(aid,))
-        db.execute('INSERT INTO event_registrations(event_id,athlete_id,added_by) VALUES(?,?,?)',(eid,aid,user['id']))
-        return {'athlete_id':aid}
+            import secrets
+            reference='WUCO-E'+str(eid)+'-'+secrets.token_hex(4).upper()
+            rid=db.execute('INSERT INTO event_registrations(event_id,athlete_id,added_by,registration_ref) VALUES(?,?,?,?)',(eid,aid,user['id'],reference)).lastrowid
+        db.execute("INSERT INTO event_entry_audit(registration_id,actor_id,action) VALUES(?,?,'confirmed')",(rid,user['id']))
+        return {'athlete_id':aid,'registration_ref':reference,'status':'confirmed'}
+    if method=='POST' and len(parts)==3 and parts[0]=='events' and parts[2]=='withdraw':
+        eid=number(parts[1]);aid=number(data.get('athlete_id'));entry_authorized(db,user,eid,aid)
+        event=one(db,'SELECT * FROM events WHERE id=?',(eid,))
+        if event['status']!='Upcoming':raise Error('A past event entry cannot be withdrawn',409)
+        if db.execute('SELECT 1 FROM bouts WHERE event_id=? AND (red_athlete_id=? OR blue_athlete_id=?)',(eid,aid,aid)).fetchone():raise Error('Contact the promoter to withdraw a fighter already assigned to a bout',409)
+        entry=one(db,'SELECT * FROM event_registrations WHERE event_id=? AND athlete_id=?',(eid,aid))
+        if entry['status']!='confirmed':raise Error('This entry is not currently confirmed',409)
+        db.execute("UPDATE event_registrations SET status='withdrawn',updated_at=CURRENT_TIMESTAMP WHERE id=?",(entry['id'],))
+        db.execute("INSERT INTO event_entry_audit(registration_id,actor_id,action) VALUES(?,?,'withdrawn')",(entry['id'],user['id']))
+        return {'ok':True,'status':'withdrawn'}
     if method=='POST' and len(parts)==3 and parts[0]=='events' and parts[2]=='bouts':
         eid=number(parts[1]); owned_event(db,user,eid)
         red,blue=number(data.get('red_athlete_id')),number(data.get('blue_athlete_id'))
         if red==blue: raise Error('Choose two different fighters')
         for aid in (red,blue):
-            if not db.execute('SELECT 1 FROM event_registrations WHERE event_id=? AND athlete_id=?',(eid,aid)).fetchone():
+            from .applications import require_approved
+            require_approved(db,aid)
+            if not db.execute("SELECT 1 FROM event_registrations WHERE event_id=? AND athlete_id=? AND status='confirmed'",(eid,aid)).fetchone():
                 raise Error('Both fighters must be registered for this event')
             if db.execute('SELECT 1 FROM bouts WHERE event_id=? AND (red_athlete_id=? OR blue_athlete_id=?)',(eid,aid,aid)).fetchone():
                 raise Error('A fighter is already on this event card',409)
         division=category(data.get('division'))
+        if any(one(db,'SELECT division FROM athletes WHERE id=?',(aid,))['division']!=division for aid in (red,blue)):raise Error('Both fighters must match the bout category')
         section=data.get('card_section','Main card')
         if section not in ('Main card','Preliminary card'): raise Error('Invalid card section')
         order=db.execute('SELECT coalesce(max(bout_order),0)+1 FROM bouts WHERE event_id=?',(eid,)).fetchone()[0]

@@ -1,4 +1,4 @@
-/* RFC local admin panel. Talks to the auth-gated /api/admin/* write API.
+/* W.U.C.O local admin panel. Talks to the auth-gated /api/admin/* write API.
    Renders all stored values escaped so stored content can never script this page. */
 const root=document.getElementById('admin');
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -44,7 +44,7 @@ async function boot(){
  if(s.data.authenticated)renderApp();else renderLogin();
 }
 function renderLogin(){
- root.innerHTML='<div class="login-box"><h2>RFC Admin</h2><p style="font-size:12px;color:var(--muted)">Local content management.</p><input type="password" id="pw" placeholder="Admin password" aria-label="Admin password"><button class="btn" id="loginbtn" style="width:100%">Sign in</button><div class="admin-msg err" id="amsg"></div></div>';
+ root.innerHTML='<div class="login-box"><h2>W.U.C.O Admin</h2><p style="font-size:12px;color:var(--muted)">Local content management.</p><input type="password" id="pw" placeholder="Admin password" aria-label="Admin password"><button class="btn" id="loginbtn" style="width:100%">Sign in</button><div class="admin-msg err" id="amsg"></div></div>';
  const go=async()=>{const r=await api('POST','login',{password:document.getElementById('pw').value});if(r.ok)renderApp();else msg((r.data&&r.data.error)||'Login failed','err');};
  document.getElementById('loginbtn').onclick=go;
  document.getElementById('pw').addEventListener('keydown',e=>{if(e.key==='Enter')go();});
@@ -53,7 +53,7 @@ function renderLogin(){
 /* ---- app shell ---- */
 function renderApp(){
  const rail=Object.entries(SPECS).map(([k,v])=>`<button data-tab="${k}" class="${k===active?'active':''}">${esc(v.label)}</button>`).join('')+`<button data-tab="__settings" class="${active==='__settings'?'active':''}">Settings & flags</button>`;
- root.innerHTML=`<div class="admin-top"><h1>RFC ADMIN</h1><div class="admin-actions"><a class="btn ghost" href="/" target="_blank">View site ↗</a><button class="btn ghost" id="logout">Log out</button></div></div><div class="admin-rail">${rail}</div><div class="admin-msg" id="amsg"></div><div id="panel"></div>`;
+ root.innerHTML=`<div class="admin-top"><h1>W.U.C.O ADMIN</h1><div class="admin-actions"><a class="btn ghost" href="/" target="_blank">View site ↗</a><button class="btn ghost" id="logout">Log out</button></div></div><div class="admin-rail">${rail}</div><div class="admin-msg" id="amsg"></div><div id="panel"></div>`;
  document.getElementById('logout').onclick=async()=>{await api('POST','logout');renderLogin();};
  document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{active=b.dataset.tab;editId=null;renderApp();});
  if(active==='__settings')renderSettings();else renderCollection(active);

@@ -1,5 +1,18 @@
 # Project structure and feature boundaries
 
+## Current W.U.C.O application, payment and event workflow
+
+The displayed brand is W.U.C.O. New fighters submit a private application, complete the EUR 10
+application fee, then require administrator approval before public listing, ranking publication or
+event registration. The Render stakeholder demo uses explicitly labelled TEST payments and PDF
+receipts; no real money is charged. Admin workspaces now include fighter approval/profile management
+and finance/date-filtered CSV reporting with separate live/test totals. Event entry supports category,
+capacity and deadline checks, confirmation references and safe withdrawal. Schema version is 6.
+See [WUCO_APPLICATIONS_PAYMENTS.md](WUCO_APPLICATIONS_PAYMENTS.md) for the full walkthrough, demo
+logins, receipt retention and the separate Stripe/durable-storage requirements for real charging.
+This current guide supersedes older descriptions below of instant registration or absent payments.
+
+
 The application remains vanilla HTML/CSS/JavaScript with Python and SQLite. No frontend framework
 or build step was added. Organize further work by domain rather than enlarging a single portal file.
 
@@ -77,3 +90,10 @@ the script creates uniquely named sample accounts and event entries. It verifies
 portrait, gym/coach connection, own profile editing, registration and category rankings, with layout
 checks at 360/390/768/1440/1920px. `RFC_TEST_URL` overrides the default local port 8004;
 `RFC_CHROMIUM_PATH` overrides `/usr/bin/chromium`. Browser tooling is not an application dependency.
+
+## New application and finance modules
+
+`portal_features/applications.py` owns paid review, status/approval guards and admin profile editing.
+`payments.py` owns the fixed EUR 10 checkout, isolated simulator, provider reconciliation and signed
+webhooks. `finance.py` owns PDF receipts, date-filtered reports and CSV. Frontend `payments.js` and
+`administration.js` mirror those boundaries. Migration 006 adds durable ledger/audit records.

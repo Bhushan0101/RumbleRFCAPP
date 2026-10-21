@@ -1,4 +1,4 @@
-"""RFC local development server. Python 3.10+, standard library only.
+"""W.U.C.O local development server. Python 3.10+, standard library only.
 
 Serves public/ statically plus a read-only JSON content API and an OPTIONAL,
 authentication-gated admin write API under /api/admin/*. The admin API stays disabled
@@ -42,7 +42,9 @@ def get_content():
         db.row_factory=sqlite3.Row
         result={}
         result['athletes']=[]
-        for row in db.execute('SELECT * FROM athletes ORDER BY display_order,id'):
+        has_approval=any(r[1]=='approval_status' for r in db.execute('PRAGMA table_info(fighter_profiles)'))
+        public_filter=" WHERE NOT EXISTS (SELECT 1 FROM fighter_profiles f WHERE f.athlete_id=a.id AND f.approval_status<>'approved')" if has_approval else ''
+        for row in db.execute('SELECT a.* FROM athletes a'+public_filter+' ORDER BY display_order,id'):
             a=dict(row)
             a.update(nick=a['nickname'],record=f"{a['wins']}–{a['losses']}–{a['draws']}")
             result['athletes'].append(a)
@@ -53,6 +55,9 @@ def get_content():
         result['gallery_items']=[dict(row) for row in db.execute('SELECT * FROM gallery_items ORDER BY display_order,id')]
         for name in ['rankings','bouts','achievements','media_items','sponsors']:
             result[name]=[dict(row) for row in db.execute(f'SELECT * FROM {name} ORDER BY id')]
+        if has_approval:
+            visible={a['id'] for a in result['athletes']}
+            result['rankings']=[r for r in result['rankings'] if r['athlete_id'] in visible]
         result['settings']={row['key']:row['value'] for row in db.execute('SELECT * FROM site_settings')}
         return result
 
@@ -410,6 +415,17 @@ class Handler(SimpleHTTPRequestHandler):
         return True
 
     # -- GET ---------------------------------------------------------------
+    def _payment_webhook(self):
+        import portal
+        from portal_features.payments import webhook
+        try:
+            length=int(self.headers.get('Content-Length','0'))
+            if length<=0 or length>1_000_000:raise portal.Error('Missing or oversized webhook',400)
+            result=webhook(DB,self.rfile.read(length),self.headers.get('Stripe-Signature',''))
+            self._json(result)
+        except portal.Error as exc:self._json({'error':str(exc)},exc.status)
+        except ValueError:self._json({'error':'Invalid webhook'},400)
+
     def _portal(self, path):
         import portal
         try:
@@ -466,6 +482,7 @@ class Handler(SimpleHTTPRequestHandler):
     # -- POST --------------------------------------------------------------
     def do_POST(self):
         path=urlsplit(self.path).path
+        if path=='/api/payments/stripe/webhook':return self._payment_webhook()
         if path.startswith('/api/portal/'):
             return self._portal(path)
         if not path.startswith('/api/admin/'):
@@ -579,7 +596,7 @@ if __name__=='__main__':
     seed_if_enabled(DB)
     admin_state='ENABLED' if admin_credentials() else 'disabled (run scripts/set_admin_password.py)'
     public=args.host not in ('127.0.0.1','localhost')
-    print(f'RFC server: http://{args.host}:{args.port}  (Ctrl+C to stop)')
+    print(f'W.U.C.O server: http://{args.host}:{args.port}  (Ctrl+C to stop)')
     print(f'Admin panel: /admin.html — admin {admin_state}')
     if public:
         print('WARNING: bound to a public interface. Set an admin password and serve behind HTTPS; '

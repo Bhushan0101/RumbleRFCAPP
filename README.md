@@ -1,4 +1,17 @@
-# RFC — Rumble Fighting Championship
+# W.U.C.O
+
+## Current W.U.C.O application, payment and event workflow
+
+The displayed brand is W.U.C.O. New fighters submit a private application, complete the EUR 10
+application fee, then require administrator approval before public listing, ranking publication or
+event registration. The Render stakeholder demo uses explicitly labelled TEST payments and PDF
+receipts; no real money is charged. Admin workspaces now include fighter approval/profile management
+and finance/date-filtered CSV reporting with separate live/test totals. Event entry supports category,
+capacity and deadline checks, confirmation references and safe withdrawal. Schema version is 6.
+See [WUCO_APPLICATIONS_PAYMENTS.md](docs/WUCO_APPLICATIONS_PAYMENTS.md) for the full walkthrough, demo
+logins, receipt retention and the separate Stripe/durable-storage requirements for real charging.
+This current guide supersedes older descriptions below of instant registration or absent payments.
+
 
 ## Current fighter / rankings UI update
 
@@ -29,11 +42,11 @@ A responsive combat-sports website inspired by the supplied UFC reference screen
 [Render deployment and testing guide](docs/RENDER_TESTING.md) covers the demo-enabled blueprint,
 five test logins and the admin Excel template → preview → publish workflow. Free-tier demo changes
 can reset on restart/redeploy. No deployment was performed here.
-[Sample Excel template](docs/templates/RFC-rankings-template.xlsx).
+[Sample Excel template](docs/templates/WUCO-rankings-template.xlsx).
 
 ## Run in your IDE
 
-Requires **Python 3.10+**. The public site and basic member portal need no pip packages, Node, API keys or paid services. For fighter photo uploads, Excel ranking uploads and Render hosting, first run `python -m pip install -r requirements.txt`.
+Requires **Python 3.10+**. The public site and basic member portal need no pip packages, Node, API keys or paid services. For PDF receipts, fighter photo uploads, Excel ranking uploads and Render hosting, first run `python -m pip install -r requirements.txt`.
 
 ```sh
 python server.py

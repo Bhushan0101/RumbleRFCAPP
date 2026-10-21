@@ -1,3 +1,11 @@
+import { applicationCard, checkoutPage, paymentsPage } from "./payments.js";
+import {
+  applicationsPage,
+  financePage,
+  setApplicationFilter,
+  setFinance,
+  financeFilters,
+} from "./administration.js";
 import { state, setState } from "./state.js";
 import { api } from "./api.js";
 import { esc, flash, icon } from "./shared.js";
@@ -30,10 +38,10 @@ const routeName = () =>
 function header() {
   const user = state.user;
   document.querySelector("#portal-navigation").innerHTML =
-    `${user ? `<a href="#${user.role === "fighter" ? "fighter" : "account"}" data-nav="profile">${user.role === "fighter" ? "My profile" : "My workspace"}</a>` : ""}<a href="#rankings" data-nav="rankings">Rankings</a><a href="#events" data-nav="events">Events</a>`;
+    `${user ? `<a href="#${user.role === "fighter" ? "fighter" : "account"}" data-nav="profile">${user.role === "fighter" ? "My profile" : "My workspace"}</a>` : ""}${user?.role === "admin" ? '<a href="#fighters">Fighters</a><a href="#finance">Finance</a>' : ""}${user && ["fighter", "promoter"].includes(user.role) ? '<a href="#payments">Receipts</a>' : ""}<a href="#rankings" data-nav="rankings">Rankings</a><a href="#events" data-nav="events">Events</a>`;
   document.querySelector("#account-controls").innerHTML = user
     ? `<a href="#${user.role === "fighter" ? "fighter" : "account"}" class="account-chip"><span>${esc(user.name[0])}</span><strong>${esc(user.name.split(" ")[0])}</strong></a><button type="button" class="button ghost signout" data-action="logout">Sign out</button>`
-    : '<a href="#account" class="signin-link">Sign in</a><a href="#register" class="button primary">Join RFC ' +
+    : '<a href="#account" class="signin-link">Sign in</a><a href="#register" class="button primary">Join W.U.C.O ' +
       icon("arrow") +
       "</a>";
   const route = routeName();
@@ -73,6 +81,13 @@ export function render() {
   else if (/^event-\d+$/.test(route))
     root.innerHTML = eventPage(Number(route.slice(6)));
   else if (route === "events") root.innerHTML = eventsPage();
+  else if (route === "fighters" && state.user?.role === "admin")
+    root.innerHTML = applicationsPage();
+  else if (route === "finance" && state.user?.role === "admin")
+    root.innerHTML = financePage();
+  else if (route === "payments" && state.user) root.innerHTML = paymentsPage();
+  else if (/^checkout-\d+$/.test(route) && state.user)
+    root.innerHTML = checkoutPage(Number(route.slice(9)));
   else if (route === "ranking-management" && state.user?.role === "admin")
     root.innerHTML = managementPage();
   else
@@ -86,11 +101,16 @@ export function render() {
         ? "Events"
         : state.user?.role === "fighter"
           ? "My fighter profile"
-          : "Member portal") + " | RFC";
+          : "Member portal") + " | W.U.C.O";
+}
+async function showRoute() {
+  if (routeName() === "finance" && state.user?.role === "admin")
+    setFinance(await api("finance/report", "POST", financeFilters));
+  render();
 }
 async function refresh() {
   setState(await api("state"));
-  render();
+  await showRoute();
 }
 function navigate(route) {
   if (routeName() === route) render();
@@ -124,7 +144,7 @@ document.addEventListener("submit", async (event) => {
           result.photoError
             ? "Your account is ready. Please upload your photo from your profile: " +
                 result.photoError
-            : "Welcome to RFC. Your fighter profile is ready.",
+            : "Your application is saved. Pay the €10 fee to send it for administrator review.",
           !!result.photoError,
         );
         return;
@@ -169,6 +189,7 @@ document.addEventListener("submit", async (event) => {
         break;
       case "event": {
         data.registration_open = Number(data.registration_open);
+        data.categories = new FormData(form).getAll("event_categories");
         const result = await api(
           "events" + (form.dataset.id ? "/" + form.dataset.id : ""),
           form.dataset.id ? "PUT" : "POST",
@@ -180,21 +201,47 @@ document.addEventListener("submit", async (event) => {
         return;
       }
       case "entry":
-        await api("events/" + form.dataset.event + "/register", "POST", data);
-        message = "Registration confirmed. You’re on the event list.";
+        const entry = await api(
+          "events/" + form.dataset.event + "/register",
+          "POST",
+          {
+            ...data,
+            acknowledged: form.elements.acknowledged?.checked === true,
+          },
+        );
+        message =
+          "Registration confirmed. Your reference: " + entry.registration_ref;
         break;
       case "guest":
         await api("events/" + form.dataset.event + "/register", "POST", {
           ...data,
           outside: true,
         });
-        break;
+        await refresh();
+        navigate("payments");
+        flash(
+          "Guest application created. Complete the fee and administrator review before registering this competitor.",
+        );
+        return;
       case "bout":
         await api("events/" + form.dataset.event + "/bouts", "POST", data);
         break;
       case "result":
         await api("bouts/" + form.dataset.bout + "/result", "PUT", data);
         break;
+      case "fighter-review":
+        await api("fighters/" + form.dataset.athlete + "/review", "PUT", data);
+        message =
+          "Review saved. The fighter can refresh their workspace to see the decision.";
+        break;
+      case "admin-fighter-profile":
+        await api("fighters/" + form.dataset.athlete + "/profile", "PUT", data);
+        message = "Fighter details updated.";
+        break;
+      case "finance-report":
+        setFinance(await api("finance/report", "POST", data), data);
+        render();
+        return;
       case "rankings":
         await api("rankings", "PUT", data);
         break;
@@ -221,14 +268,95 @@ document.addEventListener("click", async (event) => {
   const demo = event.target.closest("[data-demo]");
   if (demo) {
     const form = document.querySelector('[data-form="login"]');
-    form.elements.email.value = demo.dataset.demo + "@demo.rfc.test";
-    form.elements.password.value = "RfcDemo2026!";
+    form.elements.email.value = demo.dataset.demo + "@demo.wuco.test";
+    form.elements.password.value = "WucoDemo2026!";
     form.elements.email.focus();
     return;
   }
   if (!action) return;
   try {
     switch (action.dataset.action) {
+      case "refresh-status":
+        await refresh();
+        flash("Application status refreshed.");
+        break;
+      case "application-filter":
+        setApplicationFilter(action.dataset.value);
+        render();
+        break;
+      case "start-checkout": {
+        action.disabled = true;
+        const checkout = await api(
+          "applications/" + action.dataset.athlete + "/checkout",
+          "POST",
+          {},
+        );
+        if (checkout.url) {
+          location.assign(checkout.url);
+          return;
+        }
+        await refresh();
+        if (checkout.already_paid) {
+          flash("This application fee has already been paid.");
+          break;
+        }
+        navigate(checkout.checkout_route);
+        break;
+      }
+      case "demo-pay": {
+        if (!document.querySelector("#demo-payment-consent")?.checked)
+          throw new Error(
+            "Confirm that you understand this is a test payment.",
+          );
+        action.disabled = true;
+        await api(
+          "payments/" + action.dataset.payment + "/demo-confirm",
+          "POST",
+          { confirm: true },
+        );
+        await refresh();
+        navigate(state.user.role === "fighter" ? "fighter" : "payments");
+        flash(
+          "Test payment recorded. The application is now awaiting administrator approval. No money was charged.",
+        );
+        break;
+      }
+      case "cancel-checkout":
+        await api("payments/" + action.dataset.payment + "/cancel", "POST", {});
+        await refresh();
+        navigate("payments");
+        flash("Test checkout cancelled. No payment was recorded.");
+        break;
+      case "finance-export": {
+        const response = await fetch("/api/portal/finance/export", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Requested-With": "fetch",
+          },
+          body: JSON.stringify(financeFilters),
+        });
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error);
+        }
+        const url = URL.createObjectURL(await response.blob());
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "WUCO-payments.csv";
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        break;
+      }
+      case "withdraw-entry": {
+        if (!window.confirm("Withdraw this fighter from the event?")) return;
+        await api("events/" + action.dataset.event + "/withdraw", "POST", {
+          athlete_id: action.dataset.athlete,
+        });
+        await refresh();
+        flash("Event entry withdrawn. The place is available again.");
+        break;
+      }
       case "logout":
         await api("logout", "POST", {});
         clearRegistration();
@@ -314,13 +442,33 @@ document.addEventListener("input", (event) => {
     );
   }
 });
-window.addEventListener("hashchange", () => {
+window.addEventListener("hashchange", async () => {
   if (state) {
-    render();
+    try {
+      await showRoute();
+    } catch (error) {
+      flash(error.message, true);
+    }
     window.scrollTo({ top: 0, behavior: "instant" });
   }
 });
-refresh().catch((error) => {
+async function start() {
+  await refresh();
+  const session = new URLSearchParams(location.search).get("session_id");
+  if (session && state.user) {
+    try {
+      await api("payments/sync", "POST", { session_id: session });
+      await refresh();
+      flash("Payment status checked with the provider.");
+    } catch (error) {
+      flash(error.message, true);
+    }
+    const url = new URL(location.href);
+    url.searchParams.delete("session_id");
+    history.replaceState(null, "", url);
+  }
+}
+start().catch((error) => {
   root.innerHTML =
     '<div class="empty-state"><h1>Your corner is taking a moment.</h1><p>Refresh the page in a moment. If this continues, check the server startup logs.</p><button class="button secondary" onclick="location.reload()">Try again</button></div>';
   flash(error.message, true);

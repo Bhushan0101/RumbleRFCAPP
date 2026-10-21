@@ -24,7 +24,7 @@ def template(db,user):
     xlsx=workbook_tools()
     book=xlsx.Workbook();sheet=book.active;sheet.title='Rankings'
     sheet.append(COLUMNS)
-    for row in db.execute('SELECT a.id,a.name,r.division,r.position FROM rankings r JOIN athletes a ON a.id=r.athlete_id WHERE r.division IN (?,?) ORDER BY r.division,r.position',CATEGORIES):
+    for row in db.execute("SELECT a.id,a.name,r.division,r.position FROM rankings r JOIN athletes a ON a.id=r.athlete_id WHERE r.division IN (?,?) AND NOT EXISTS (SELECT 1 FROM fighter_profiles f WHERE f.athlete_id=a.id AND f.approval_status<>'approved') ORDER BY r.division,r.position",CATEGORIES):
         sheet.append(tuple(row))
     for row in sheet.iter_rows(min_row=2):
         for cell in row[1:3]:cell.data_type='s'
@@ -33,7 +33,7 @@ def template(db,user):
     for cell in sheet[1]:cell.font=xlsx.styles.Font(bold=True,color='FFFFFF');cell.fill=xlsx.styles.PatternFill('solid',fgColor='181818')
     reference=book.create_sheet('Fighters')
     reference.append(('athlete_id','name','division','current_position'))
-    for row in db.execute('SELECT a.id,a.name,a.division,r.position FROM athletes a LEFT JOIN rankings r ON r.athlete_id=a.id AND r.division=a.division WHERE a.division IN (?,?) ORDER BY a.division,a.name',CATEGORIES):
+    for row in db.execute("SELECT a.id,a.name,a.division,r.position FROM athletes a LEFT JOIN rankings r ON r.athlete_id=a.id AND r.division=a.division WHERE a.division IN (?,?) AND NOT EXISTS (SELECT 1 FROM fighter_profiles f WHERE f.athlete_id=a.id AND f.approval_status<>'approved') ORDER BY a.division,a.name",CATEGORIES):
         reference.append(tuple(row))
     for row in reference.iter_rows(min_row=2):
         for cell in row[1:3]:cell.data_type='s'
@@ -41,7 +41,7 @@ def template(db,user):
     for col,width in [('A',16),('B',32),('C',24),('D',20)]:reference.column_dimensions[col].width=width
     instructions=book.create_sheet('Instructions')
     for line in [
-        'RFC rankings upload — demo / sample data',
+        'W.U.C.O rankings upload — demo / sample data',
         'Active categories: Featherweight and Lightweight only.',
         'Edit the Rankings sheet only. Keep athlete_id, name, division, position headers.',
         'Use existing athlete IDs from the Fighters reference sheet. Name and division must match that athlete.',
@@ -98,6 +98,9 @@ def import_rankings(db,user,data):
             aid=int(aid);athlete=athletes[aid]
             if not isinstance(name,str) or name.strip()!=athlete['name'] or not isinstance(division,str) or division.strip()!=athlete['division']:
                 errors.append(f'Row {index}: name and division must match athlete {aid}');continue
+            from portal_features.applications import approved
+            if not approved(db,aid):
+                errors.append(f'Row {index}: fighter must be approved before ranking publication');continue
             division=division.strip()
             if division not in CATEGORIES:
                 errors.append(f'Row {index}: only Featherweight and Lightweight are active');continue

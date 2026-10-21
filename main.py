@@ -158,6 +158,17 @@ def app(environ, start_response):
     path = environ.get('PATH_INFO', '/')
     method = environ.get('REQUEST_METHOD', 'GET')
 
+    if path=='/api/payments/stripe/webhook':
+        from portal_features.payments import webhook
+        from portal import Error
+        from http import HTTPStatus
+        if method!='POST':return _respond(start_response,'405 Method Not Allowed',_jb({'error':'POST required'}))
+        try:
+            result=webhook(S.DB,_body(environ,max_length=1_000_000),environ.get('HTTP_STRIPE_SIGNATURE',''))
+            return _respond(start_response,'200 OK',_jb(result))
+        except Error as exc:return _respond(start_response,f'{exc.status} {HTTPStatus(exc.status).phrase}',_jb({'error':str(exc)}))
+        except (S.Invalid,ValueError):return _respond(start_response,'400 Bad Request',_jb({'error':'Invalid webhook'}))
+
     if path.startswith('/api/portal/'):
         import portal
         from http import HTTPStatus

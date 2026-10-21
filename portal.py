@@ -54,6 +54,7 @@ def linked_id(db, data, key, table):
 
 def create_user(db, data, allow_admin=False):
     name, email = text(data, 'name'), text(data, 'email', 254).lower()
+    if email in {r+'@demo.rfc.test' for r in ('admin','fighter','promoter','gym','coach')}:email=email.replace('@demo.rfc.test','@demo.wuco.test')
     role = data.get('role')
     if role not in (('admin',) if allow_admin else ()) + ('fighter','gym','coach','promoter'):
         raise Error('Choose fighter, gym, coach or promoter')
@@ -85,7 +86,7 @@ def create_user(db, data, allow_admin=False):
         db.execute('INSERT INTO promotions(owner_id,name) VALUES(?,?)', (uid,text(data,'organization')))
     elif role == 'fighter':
         aid = create_athlete(db, data)
-        db.execute('INSERT INTO fighter_profiles(athlete_id,user_id,gym_id,coach_id) VALUES(?,?,?,?)', (aid,uid,gym,coach))
+        db.execute('INSERT INTO fighter_profiles(athlete_id,user_id,gym_id,coach_id,approval_status,legacy_member,created_by) VALUES(?,?,?,?,?,?,?)', (aid,uid,gym,coach,'awaiting_payment',0,uid))
     return uid
 
 def create_athlete(db, data):
@@ -94,17 +95,17 @@ def create_athlete(db, data):
 
 def snapshot(db, user):
     # Only the signed-in user (and app admin) sees account email; directories are public profiles.
-    result = {'user':user, 'categories':list(CATEGORIES), 'demo_mode':os.environ.get('RFC_DEMO_MODE')=='1',
+    result = {'user':user, 'categories':list(CATEGORIES), 'demo_mode':os.environ.get('WUCO_DEMO_MODE',os.environ.get('RFC_DEMO_MODE'))=='1',
         'gyms': rows(db,'SELECT id,name,city FROM gyms'),
         'coaches': rows(db,'SELECT id,name,gym_id FROM coaches'),
         'promotions': rows(db,'SELECT id,name FROM promotions'),
         'fighters': rows(db,'''SELECT a.id,a.name,a.nickname,a.biography,a.portrait_url,a.division,a.country,a.wins,a.losses,a.draws,
-            f.gym_id,f.coach_id,CASE WHEN f.user_id IS NULL THEN 0 ELSE 1 END AS has_account
+            f.gym_id,f.coach_id,coalesce(f.approval_status,'approved') AS approval_status,CASE WHEN f.user_id IS NULL THEN 0 ELSE 1 END AS has_account
             FROM athletes a LEFT JOIN fighter_profiles f ON f.athlete_id=a.id ORDER BY a.name'''),
         'events': rows(db,'''SELECT e.*,p.name AS promotion_name,
-            (SELECT count(*) FROM event_registrations r WHERE r.event_id=e.id) AS registered_count
+            (SELECT count(*) FROM event_registrations r WHERE r.event_id=e.id AND r.status='confirmed') AS registered_count
             FROM events e LEFT JOIN promotions p ON p.id=e.promotion_id ORDER BY e.id DESC'''),
-        'registrations': rows(db,'SELECT event_id,athlete_id FROM event_registrations'),
+        'registrations': rows(db,"SELECT id,event_id,athlete_id,status,registration_ref FROM event_registrations WHERE status='confirmed'"),
         'bouts': rows(db,'SELECT b.*,r.outcome FROM bouts b LEFT JOIN bout_results r ON r.bout_id=b.id ORDER BY b.event_id,b.bout_order,b.id'),
         'rankings': rows(db,'SELECT * FROM rankings WHERE division IN (?,?) ORDER BY division,position',CATEGORIES)}
     if user:
@@ -129,6 +130,30 @@ def snapshot(db, user):
         gym_id=own.get('id') if user['role']=='gym' else own.get('gym_id')
         result['gyms']=[g for g in result['gyms'] if g['id']==gym_id]
         result['coaches']=[c for c in result['coaches'] if (gym_id and c['gym_id']==gym_id) or (user['role']=='coach' and c['id']==own.get('id'))]
+    from portal_features.payments import config as payment_config
+    result['payment_settings']=payment_config()
+    result['brand_name']='W.U.C.O'
+    from portal_features.events import availability
+    for event in result['events']:event['availability']=availability(db,event)
+    if user:
+        result['my_entries']=rows(db,'''SELECT r.* FROM event_registrations r JOIN fighter_profiles f ON f.athlete_id=r.athlete_id WHERE f.user_id=? OR f.created_by=? ORDER BY r.id DESC''',(user['id'],user['id']))
+        result['my_payments']=rows(db,'''SELECT p.id,p.athlete_id,p.status,p.provider,p.amount_cents,p.currency,p.is_test,p.receipt_number,p.paid_at,p.refunded_cents,p.fighter_name
+            FROM payments p JOIN fighter_profiles f ON f.athlete_id=p.athlete_id
+            WHERE p.payer_id=? OR f.user_id=? OR f.created_by=? ORDER BY p.id DESC''',(user['id'],user['id'],user['id']))
+        result['my_applications']=rows(db,'''SELECT f.*,a.name,a.division FROM fighter_profiles f JOIN athletes a ON a.id=f.athlete_id
+            WHERE f.user_id=? OR f.created_by=?''',(user['id'],user['id']))
+        if user['role']=='admin':
+            from portal_features.applications import overview
+            result['applications']=overview(db,user)
+            result['pending_approval_count']=sum(a['approval_status']=='pending_approval' for a in result['applications'])
+    visible_ids={f['id'] for f in result['fighters'] if f['approval_status']=='approved'}
+    visible_ids.update(r['athlete_id'] for r in result['registrations'])
+    if user:
+        visible_ids.update(result.get('team',[]))
+        visible_ids.update(a['athlete_id'] for a in result.get('my_applications',[]))
+    if user and user['role']=='admin':visible_ids={f['id'] for f in result['fighters']}
+    result['fighters']=[f for f in result['fighters'] if f['id'] in visible_ids]
+    result['rankings']=[r for r in result['rankings'] if any(f['id']==r['athlete_id'] and f['approval_status']=='approved' for f in result['fighters'])]
     own_athlete_ids=set(result.get('team',[]))
     for fighter in result['fighters']:
         if (not user or user['role']=='fighter') and fighter['id'] not in own_athlete_ids:
@@ -141,6 +166,15 @@ def dispatch(db, user, method, path, data):
     parts=path.split('/')
     if method=='POST' and path=='register':
         return {'id':create_user(db,data), 'message':'Account created. Sign in to continue.'}
+    if parts[0]=='fighters':
+        from portal_features.applications import dispatch as applications_dispatch
+        return applications_dispatch(db,user,method,path,data)
+    if parts[0] in ('payments','applications'):
+        from portal_features.payments import dispatch as payment_dispatch
+        return payment_dispatch(db,user,method,path,data)
+    if method=='POST' and path=='finance/report':
+        from portal_features.finance import report
+        return report(db,user,data)
     if method=='POST' and path=='gym/lookup':
         from portal_features.fighters import lookup_gym
         return lookup_gym(db,data)
@@ -190,6 +224,7 @@ def handle(db_path, method, path, data=None, cookie='', headers=None, host='loca
             user=dict(user_row) if user_row else None
             if method=='POST' and path=='login':
                 email=text(data,'email',254).lower()
+                if email in {r+'@demo.rfc.test' for r in ('admin','fighter','promoter','gym','coach')}:email=email.replace('@demo.rfc.test','@demo.wuco.test')
                 password=data.get('password','')
                 if not isinstance(password,str) or len(password)>128:
                     raise Error('Invalid email or password',401)
@@ -207,14 +242,25 @@ def handle(db_path, method, path, data=None, cookie='', headers=None, host='loca
                 db.execute('DELETE FROM portal_sessions WHERE token_hash=?',(digest,))
                 extra['Set-Cookie']='rfc_member=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'
                 result={'ok':True}
+            elif method=='GET' and re.fullmatch(r'payments/[0-9]+/receipt',path):
+                from portal_features.finance import receipt
+                result,reference=receipt(db,user,int(path.split('/')[1]))
+                extra={'Content-Type':'application/pdf','Content-Disposition':f'attachment; filename={reference}.pdf'}
+            elif method=='POST' and path=='finance/export':
+                from portal_features.finance import export_csv
+                result=export_csv(db,user,data)
+                extra={'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename=WUCO-payments.csv'}
             elif method=='GET' and path=='rankings/template':
                 from ranking_excel import template
                 result=template(db,user)
-                extra={'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','Content-Disposition':'attachment; filename=RFC-rankings-template.xlsx'}
+                extra={'Content-Type':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet','Content-Disposition':'attachment; filename=WUCO-rankings-template.xlsx'}
             else:
                 result=dispatch(db,user,method,path,data)
         return 200,result,extra
     except Error as e:
         return e.status,{'error':str(e)},{}
+    except sqlite3.OperationalError as exc:
+        if 'locked' in str(exc).lower():return 503,{'error':'The workspace is busy. Please retry in a moment.'},{}
+        raise
     except sqlite3.IntegrityError:
         return 409,{'error':'This account, registration or ranking already exists, or a linked record is invalid.'},{}

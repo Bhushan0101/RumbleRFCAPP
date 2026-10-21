@@ -413,7 +413,7 @@
     {
       "id": 1,
       "title": "THE NEXT CHAPTER",
-      "subtitle": "RFC • SHOWCASE 01",
+      "subtitle": "W.U.C.O • SHOWCASE 01",
       "status": "Upcoming",
       "starts_at": null,
       "timezone": "Europe/Dublin",
@@ -424,12 +424,12 @@
       "description": null,
       "is_sample": 1,
       "display_order": 0,
-      "sub": "RFC • SHOWCASE 01"
+      "sub": "W.U.C.O • SHOWCASE 01"
     },
     {
       "id": 2,
       "title": "RISE OF THE CONTENDERS",
-      "subtitle": "RFC • SHOWCASE 02",
+      "subtitle": "W.U.C.O • SHOWCASE 02",
       "status": "Upcoming",
       "starts_at": null,
       "timezone": "Europe/Dublin",
@@ -440,12 +440,12 @@
       "description": null,
       "is_sample": 1,
       "display_order": 1,
-      "sub": "RFC • SHOWCASE 02"
+      "sub": "W.U.C.O • SHOWCASE 02"
     },
     {
       "id": 3,
       "title": "NIGHT OF CHAMPIONS",
-      "subtitle": "RFC • ARCHIVE CONCEPT",
+      "subtitle": "W.U.C.O • ARCHIVE CONCEPT",
       "status": "Past",
       "starts_at": null,
       "timezone": "Europe/Dublin",
@@ -456,7 +456,7 @@
       "description": null,
       "is_sample": 1,
       "display_order": 2,
-      "sub": "RFC • ARCHIVE CONCEPT"
+      "sub": "W.U.C.O • ARCHIVE CONCEPT"
     }
   ],
   "stories": [
@@ -464,7 +464,7 @@
       "id": 1,
       "title": "A new chapter. The same fighting spirit.",
       "type": "News",
-      "body": "This concept introduces RFC through a confident visual identity: deep green, championship gold and a focus on the athletes. This is sample editorial content; official announcements will appear here when supplied.",
+      "body": "This concept introduces W.U.C.O through a confident visual identity: deep green, championship gold and a focus on the athletes. This is sample editorial content; official announcements will appear here when supplied.",
       "image_url": "assets/arena.webp",
       "video_url": null,
       "published_at": null,
@@ -475,7 +475,7 @@
       "id": 2,
       "title": "Inside the cage: the discipline behind the fight",
       "type": "Interviews",
-      "body": "The preparation starts long before fight night. This sample interview layout provides space for athlete perspectives, training stories and the journey to competition. Replace this text with an approved RFC interview.",
+      "body": "The preparation starts long before fight night. This sample interview layout provides space for athlete perspectives, training stories and the journey to competition. Replace this text with an approved W.U.C.O interview.",
       "image_url": "assets/arena.webp",
       "video_url": null,
       "published_at": null,
@@ -486,7 +486,7 @@
       "id": 3,
       "title": "The next generation steps into the spotlight",
       "type": "News",
-      "body": "A place to discover emerging talent and follow their progress. This demonstration story is a placeholder for verified RFC athlete announcements.",
+      "body": "A place to discover emerging talent and follow their progress. This demonstration story is a placeholder for verified W.U.C.O athlete announcements.",
       "image_url": "assets/arena.webp",
       "video_url": null,
       "published_at": null,
@@ -497,7 +497,7 @@
       "id": 4,
       "title": "Fight night, through a different lens",
       "type": "Galleries",
-      "body": "This gallery preview uses a generated arena illustration. Add licensed event photographs to turn it into a full RFC event gallery.",
+      "body": "This gallery preview uses a generated arena illustration. Add licensed event photographs to turn it into a full W.U.C.O event gallery.",
       "image_url": "assets/arena.webp",
       "video_url": null,
       "published_at": null,
@@ -524,7 +524,7 @@
       "title": "Sample reel · Fight week energy",
       "url": "https://www.instagram.com/",
       "thumbnail_url": "assets/arena.webp",
-      "description": "Illustrative reel placeholder. Connect the RFC Instagram account in the admin panel.",
+      "description": "Illustrative reel placeholder. Connect the W.U.C.O Instagram account in the admin panel.",
       "is_sample": 1,
       "display_order": 0
     },
@@ -535,7 +535,7 @@
       "title": "Sample reel · Inside the cage",
       "url": "https://www.instagram.com/",
       "thumbnail_url": "assets/arena.webp",
-      "description": "Illustrative reel placeholder. Connect the RFC Instagram account in the admin panel.",
+      "description": "Illustrative reel placeholder. Connect the W.U.C.O Instagram account in the admin panel.",
       "is_sample": 1,
       "display_order": 1
     },
@@ -546,7 +546,7 @@
       "title": "Sample reel · Walkout moment",
       "url": "https://www.instagram.com/",
       "thumbnail_url": "assets/arena.webp",
-      "description": "Illustrative reel placeholder. Connect the RFC Instagram account in the admin panel.",
+      "description": "Illustrative reel placeholder. Connect the W.U.C.O Instagram account in the admin panel.",
       "is_sample": 1,
       "display_order": 2
     },
@@ -554,10 +554,10 @@
       "id": 4,
       "platform": "youtube",
       "kind": "video",
-      "title": "Sample video · RFC channel trailer",
+      "title": "Sample video · W.U.C.O channel trailer",
       "url": "https://www.youtube.com/",
       "thumbnail_url": "assets/arena.webp",
-      "description": "Illustrative video placeholder. Connect the RFC YouTube channel in the admin panel.",
+      "description": "Illustrative video placeholder. Connect the W.U.C.O YouTube channel in the admin panel.",
       "is_sample": 1,
       "display_order": 3
     },
@@ -829,7 +829,7 @@
   "media_items": [],
   "sponsors": [],
   "settings": {
-    "brand_name": "RFC — Rumble Fighting Championship",
+    "brand_name": "W.U.C.O",
     "primary_color": "#123c2b",
     "accent_color": "#c7a461",
     "content_mode": "sample",

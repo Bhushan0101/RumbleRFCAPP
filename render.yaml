@@ -2,7 +2,7 @@
 # Free-tier storage is ephemeral: edits and registrations reset after restart/redeploy.
 services:
   - type: web
-    name: RFC-Championship
+    name: WUCO-Portal
     runtime: python
     plan: free
     buildCommand: "pip install -r requirements.txt"
@@ -11,7 +11,9 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: "3.12.7"
-      - key: RFC_DEMO_MODE
+      - key: WUCO_DEMO_MODE
         value: "1"
       - key: RFC_DB_PATH
         value: /tmp/rfc-demo.sqlite3
+      - key: WUCO_PAYMENT_MODE
+        value: demo

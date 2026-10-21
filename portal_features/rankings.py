@@ -6,6 +6,8 @@ def update_position(db,user,data):
     require(user,'admin')
     aid,position=number(data.get('athlete_id')),number(data.get('position'))
     athlete=one(db,'SELECT * FROM athletes WHERE id=?',(aid,))
+    from .applications import require_approved
+    require_approved(db,aid)
     division=category(athlete['division'])
     current=rows(db,'SELECT * FROM rankings WHERE division=? ORDER BY position',(division,))
     ordered=[r['athlete_id'] for r in current if r['athlete_id']!=aid]
