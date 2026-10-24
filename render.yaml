@@ -18,7 +18,7 @@ services:
     region: frankfurt       # closest to Ireland
     rootDir: app-next
     buildCommand: "npm install --legacy-peer-deps && npm run build"
-    startCommand: "node app-next/scripts/boot.cjs"
+    startCommand: "node scripts/boot.cjs"
     healthCheckPath: /
     autoDeploy: true
     envVars:
