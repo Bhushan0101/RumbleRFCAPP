@@ -1,96 +1,116 @@
 # Instructions for Claude / IDE coding assistants
 
-## Current W.U.C.O application, payment and event workflow
+Read this file first, followed by `docs/PROJECT_INTENT.md`, `docs/ARCHITECTURE.md`,
+`docs/DATABASE.md`, `docs/EMAIL.md` and `docs/FUTURE_PLANS.md`.
 
-The displayed brand is W.U.C.O. New fighters submit a private application, complete the EUR 10
-application fee, then require administrator approval before public listing, ranking publication or
-event registration. The Render stakeholder demo uses explicitly labelled TEST payments and PDF
-receipts; no real money is charged. Admin workspaces now include fighter approval/profile management
-and finance/date-filtered CSV reporting with separate live/test totals. Event entry supports category,
-capacity and deadline checks, confirmation references and safe withdrawal. Schema version is 6.
-See [WUCO_APPLICATIONS_PAYMENTS.md](docs/WUCO_APPLICATIONS_PAYMENTS.md) for the full walkthrough, demo
-logins, receipt retention and the separate Stripe/durable-storage requirements for real charging.
-This current guide supersedes older descriptions below of instant registration or absent payments.
+## Project
 
+**W.U.C.O. — World United Combat Organisation (Ireland)**: a responsive website and local member
+portal for the national combat-sports federation. Public pages for rankings, fighters, clubs,
+promoters and events; a member portal where fighters register and manage their profile; and gyms
+run their own page, timetable and class bookings.
 
-## Current fighter / rankings UI update
-
-The current interface is black and white with saffron accents. The member portal uses its own
-centered stylesheet and ES modules under `public/portal/`. Fighter registration is a three-step
-journey with an optional portrait; only Featherweight and Lightweight are active. The directory is
-removed. Fighters see only their own gym; invitation codes connect gyms without exposing a directory.
-Migration 005 adds gym invitation codes and preserves existing data. Pillow validates uploaded photos.
-See [FIGHTER_JOURNEY.md](docs/FIGHTER_JOURNEY.md) for testing and [PROJECT_STRUCTURE.md](docs/PROJECT_STRUCTURE.md)
-for feature boundaries. Event/promotion/gym management is retained; this iteration prioritizes the
-fighter profile and portal rankings.
-
-
-Render stakeholder testing is configured in `render.yaml` with `RFC_DEMO_MODE=1` and an
-isolated ephemeral `RFC_DB_PATH`. Excel templates/upload preview/publication use `ranking_excel.py`;
-install `requirements.txt` for Excel support. Default startup without the demo flag does not
-provision dummy accounts. See [docs/RENDER_TESTING.md](docs/RENDER_TESTING.md) for deployment and user instructions.
-Existing v4 databases are not re-seeded during initialization, preserving portal edits and ranking
-omissions across process restarts on retained storage. No Render deployment was performed here.
-
-
-## Current update (2026-10-21)
-
-Read `docs/MEMBER_PORTAL.md` for the connected registration/event/results demo and go-live scope.
-`portal.py` and `public/portal.*` add role-based accounts; migration 004 adds schema v4.
-Use `RFC_DB_PATH` for an isolated development database and seed dummy accounts only with explicit
-`scripts/seed_portal_demo.py --local-demo`. Existing tracked database/assets were not replaced.
-Stored ranking positions, event cards and athlete fight history are now connected. Result
-corrections must use the portal's atomic accounting/audit path, not generic CMS record edits.
-Run `python -m unittest discover -s tests -v` as well as the existing project checker.
-Keep this guide and project docs current when implementing further changes.
-
-
-Read this file first, followed by `docs/PROJECT_INTENT.md`, `docs/ARCHITECTURE.md` and `docs/DATABASE.md`.
-
-## Goal
-
-Continue developing **RFC — Rumble Fighting Championship**, a responsive website inspired by the user's supplied UFC screenshots, using the supplied RFC identity and the current black/white/saffron direction. This is a working concept and portable local development handover, not an established live ticketing business platform.
+This is a working concept and portable local-development handover. The Python server is for local
+dev and the Render stakeholder demo only — not a production platform.
 
 ## Preserve
 
-- The user's RFC identity, black/white/saffron palette and overall editorial structure.
-- Centred logo, white floating-style navigation, condensed uppercase headings, dark event blocks, athlete grids and feature-story layouts.
-- Responsive behaviour and accessible native dialogs, labelled controls, keyboard focus and reduced-motion support.
-- Clear sample-content labelling until real information is verified.
-- Existing working navigation, search, filters and detail dialogs.
+- The W.U.C.O. brand: deep-green and gold palette, central tree-of-life mark flanking the
+  "W.U.C.O" wordmark, condensed uppercase display type, dark event blocks.
+- Responsive, accessible layouts: native dialogs, labelled controls, keyboard focus,
+  reduced-motion support.
+- Clear sample-content labelling until real information is supplied by the organiser.
+- Existing working navigation, search, filters, detail dialogs, member login, and admin approval
+  flow.
 
 ## Stack and commands
 
-Vanilla HTML/CSS/JavaScript in `public/`. Standard-library Python server and SQLite. No npm build step. Core site/member workflows use stdlib; install requirements.txt for photo uploads, Excel rankings and Gunicorn hosting.
+Vanilla HTML/CSS/JavaScript in `public/`. Standard-library Python server + SQLite. No npm build
+step. Core workflows use stdlib; `requirements.txt` adds Pillow (photo uploads), openpyxl (Excel
+rankings) and Gunicorn (Render hosting).
 
-- Run: `python server.py` → http://localhost:8000
-- Checks: `python scripts/check_project.py`
+- Run locally: `python server.py` → http://localhost:8000
+- Project check: `python scripts/check_project.py`
 - Optional JS syntax check: `node --check public/app.js`
 - Refresh static export: `python scripts/export_content.py`
+- Tests: `python -m unittest discover -s tests -v`
+
+## First-release scope (in progress)
+
+1. **Fighter registration with Class.** Fields: First Name, Last Name, Martial Art, Class
+   (J/N/L/C/B/A — see table below). Gym is optional at signup; a fighter may also request to
+   join a gym after approval and the gym admin approves the request.
+2. **Admin approval.** Admin sees new applications in the portal and approves/rejects. Approved
+   fighters can log in. There is **no application fee** — the previous €10 subscription has been
+   removed.
+3. **Digital Fighter Passport.** Approved fighters get a fighter number (`IRL-000NNN`) and a
+   public passport page (name, club, division, discipline, record, status, nationality, QR). An
+   Apple Wallet `.pkpass` is parked — see `docs/FUTURE_PLANS.md`.
+4. **Gym onboarding (admin-driven).** Public enquiry page `/gyms/join`. WUCO admin reviews
+   enquiries and emails a one-time signed onboarding link. The gym fills in logo, hero,
+   timetable image, structured classes, pricing products (Day / Week / Month / Per-class) and a
+   Revolut handle. Admin approves and the coach account is created.
+5. **Gym page + bookings.** Each gym has a public page with timetable image + structured class
+   list. Fighters book single classes or buy passes via a Revolut redirect; the gym receives a
+   notification on booking.
+6. **Rankings & homepage** per the supplied design: central wordmark flanked by the tree-of-life
+   mark, National Rankings tile, Upcoming Events tile, four action cards.
+
+### Fighter Classes
+
+| Code | Name     | Meaning                        |
+|------|----------|--------------------------------|
+| J    | J-Class  | Under 18                       |
+| N    | N-Class  | Up to 5 recorded fights        |
+| L    | L-Class  | Learning class                 |
+| C    | C-Class  | No shin pads                   |
+| B    | B-Class  | Debut pro                      |
+| A    | A-Class  | Seasoned pro                   |
+
+Class is an experience tier stored alongside weight division. Rankings remain filterable by
+weight (-57, -60, -63, -65, -70, -72, -75, -80, -85, +85 kg).
+
+## Email / notifications
+
+No SMTP is wired. All outbound mail is **written to `logs/outbound_mail.log`** AND surfaced in
+the admin portal inbox. See `docs/EMAIL.md`. Swap for real SMTP later by replacing the single
+sender shim.
 
 ## Data rules
 
-The working database is `database/rfc.sqlite3`. Back it up before migrations. `database/schema.sql` is version 1, not a migration runner. Do not delete/recreate the database to change schema. Preserve user edits. The supplied initializer restores missing sample IDs; revise seeding before switching to real content.
+Working DB is `database/rfc.sqlite3` (filename retained; schema is WUCO). Back it up before
+migrations. Do not delete/recreate the DB to change schema — add a migration under
+`scripts/migrations/NNN_*.sql`. Preserve user edits; the initializer only restores missing
+sample IDs.
 
-Athletes/events/stories/gallery items load from the API. Rankings now read stored positions/movement. Event cards and athlete fight history use bouts/results. Achievements, media_items and sponsors remain prepared/API-exposed but are not integrated into their public displays. Do not claim those remaining features are complete.
+Public API is read-only. Writes live under `/api/admin/*` (admin session cookie `wuco_session`)
+or `/api/portal/*` (member session cookie `wuco_member`). Admin is disabled by default; set a
+password with `python scripts/set_admin_password.py` (writes gitignored `admin_config.json`;
+never under `public/`).
 
-An optional, authentication-gated admin write API exists under `/api/admin/*` (see `docs/ARCHITECTURE.md`). It is **disabled by default** and stays off until a local password is set with `python scripts/set_admin_password.py` (writes `admin_config.json`, which is gitignored and must never live under `public/`). Organisers can CRUD athletes/events/bouts/rankings/achievements/sponsors, **upload athlete images** (admin-only, saved to `public/assets/athletes/`), and **bulk-import athletes from a CSV template**. The public content API remains read-only. All DB-derived text is escaped at render (`esc`) and URLs validated (`safeUrl` client-side, `v_url` server-side) — keep it that way for any new rendered field.
+All DB-derived text is escaped at render (`esc`) and URLs validated (`safeUrl` client-side,
+`v_url` server-side). Keep that invariant for every new rendered field or write path.
 
-**Gallery and News are feature-flagged OFF** (`site_settings.gallery_enabled`/`news_enabled` = `'0'`); the code and admin endpoints remain but their nav/routes and admin editing are hidden. Instagram is parked — see `docs/INSTAGRAM.md`. Re-enable by setting the flags to `'1'` and re-adding the `stories`/`gallery_items` entries to `SPECS` in `public/admin.js`. Athlete cards flip (front `portrait_url` = cut-out PNG, back `cartoon_url` = stylised cartoon); both images are supplied by the organiser, not generated in-code.
+### Current feature flags
 
-Do not invent real RFC people, fights, results, partners, dates, records, contacts or legal text. Replace samples only with user-approved content. The same generated arena image is reused deliberately as illustrative imagery; athlete cards need actual approved portraits.
-
-## Useful next work
-
-1. Connect rank positions, bouts, athlete biographies, achievements, media galleries and sponsors to their existing tables.
-2. Use verified per-athlete portraits and per-event posters instead of reused concept imagery.
-3. Add real event dates, countdowns and official ticket links only after those are supplied.
-4. Replace placeholder contact and policy dialogs with approved content.
-5. Content management: an authenticated local admin write API now exists (`/api/admin/*`, optional, disabled until a password is set). Extend it carefully — keep validation/escaping, auth and the 127.0.0.1 bind.
-6. Add meaningful integration tests as behaviour expands, then desktop/mobile browser QA.
+- `site_settings.gallery_enabled` / `news_enabled` default `'0'` — stories/gallery UI hidden.
+  Re-enable in `site_settings` and re-add the `stories`/`gallery_items` entries to `SPECS` in
+  `public/admin.js`.
+- Instagram parked — see `docs/INSTAGRAM.md`.
 
 ## Technical boundaries
 
-The Python server is local development only. Do not expose it publicly as a production server. No credentials ship with the project; the admin password, if set, lives only in the gitignored `admin_config.json` (or env vars) — never add secrets to frontend code or commit them. Content rendering uses template strings/innerHTML: DB-derived text is now escaped at render and URLs are validated on both client and server. Maintain that escaping/validation for any new rendered field or write path.
+The Python server is local-dev / demo only — do not expose publicly as production. No
+credentials ship with the project. Admin and SMTP (when added) credentials live only in
+gitignored config or environment variables — never in frontend code or commits.
 
-Do not introduce a framework, remote database, payment provider or cloud dependency without a concrete need from the user. Keep existing features working while improving the implementation. See `docs/NEXT_STEPS.md` for the completion checklist.
+Do not introduce a framework, remote database, cloud dependency or paid provider (Stripe,
+Apple Wallet, etc.) without a concrete need from the user. Keep existing features working while
+improving the implementation.
+
+## Do not invent
+
+Do not fabricate real WUCO people, fights, results, partners, dates, records, contacts or legal
+text. Replace samples only with content supplied by the organiser. Monarch Fight Academy is
+seeded as the sample gym — timetable image is user-supplied, prices and Revolut handle are
+placeholders.

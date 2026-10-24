@@ -1,10 +1,8 @@
-import { applicationCard, checkoutPage, paymentsPage } from "./payments.js";
 import {
   applicationsPage,
-  financePage,
+  gymEnquiriesPage,
+  notificationsPage,
   setApplicationFilter,
-  setFinance,
-  financeFilters,
 } from "./administration.js";
 import { state, setState } from "./state.js";
 import { api } from "./api.js";
@@ -38,7 +36,7 @@ const routeName = () =>
 function header() {
   const user = state.user;
   document.querySelector("#portal-navigation").innerHTML =
-    `${user ? `<a href="#${user.role === "fighter" ? "fighter" : "account"}" data-nav="profile">${user.role === "fighter" ? "My profile" : "My workspace"}</a>` : ""}${user?.role === "admin" ? '<a href="#fighters">Fighters</a><a href="#finance">Finance</a>' : ""}${user && ["fighter", "promoter"].includes(user.role) ? '<a href="#payments">Receipts</a>' : ""}<a href="#rankings" data-nav="rankings">Rankings</a><a href="#events" data-nav="events">Events</a>`;
+    `${user ? `<a href="#${user.role === "fighter" ? "fighter" : "account"}" data-nav="profile">${user.role === "fighter" ? "My profile" : "My workspace"}</a>` : ""}${user?.role === "admin" ? '<a href="#fighters">Fighters</a><a href="#gym-enquiries">Gyms</a><a href="#notifications">Inbox</a>' : ""}<a href="#rankings" data-nav="rankings">Rankings</a><a href="#events" data-nav="events">Events</a>`;
   document.querySelector("#account-controls").innerHTML = user
     ? `<a href="#${user.role === "fighter" ? "fighter" : "account"}" class="account-chip"><span>${esc(user.name[0])}</span><strong>${esc(user.name.split(" ")[0])}</strong></a><button type="button" class="button ghost signout" data-action="logout">Sign out</button>`
     : '<a href="#account" class="signin-link">Sign in</a><a href="#register" class="button primary">Join W.U.C.O ' +
@@ -83,11 +81,10 @@ export function render() {
   else if (route === "events") root.innerHTML = eventsPage();
   else if (route === "fighters" && state.user?.role === "admin")
     root.innerHTML = applicationsPage();
-  else if (route === "finance" && state.user?.role === "admin")
-    root.innerHTML = financePage();
-  else if (route === "payments" && state.user) root.innerHTML = paymentsPage();
-  else if (/^checkout-\d+$/.test(route) && state.user)
-    root.innerHTML = checkoutPage(Number(route.slice(9)));
+  else if (route === "gym-enquiries" && state.user?.role === "admin")
+    root.innerHTML = gymEnquiriesPage();
+  else if (route === "notifications" && state.user?.role === "admin")
+    root.innerHTML = notificationsPage();
   else if (route === "ranking-management" && state.user?.role === "admin")
     root.innerHTML = managementPage();
   else
@@ -104,8 +101,6 @@ export function render() {
           : "Member portal") + " | W.U.C.O";
 }
 async function showRoute() {
-  if (routeName() === "finance" && state.user?.role === "admin")
-    setFinance(await api("finance/report", "POST", financeFilters));
   render();
 }
 async function refresh() {
@@ -144,7 +139,7 @@ document.addEventListener("submit", async (event) => {
           result.photoError
             ? "Your account is ready. Please upload your photo from your profile: " +
                 result.photoError
-            : "Your application is saved. Pay the €10 fee to send it for administrator review.",
+            : "Your application has been submitted and is awaiting administrator approval.",
           !!result.photoError,
         );
         return;
@@ -218,9 +213,9 @@ document.addEventListener("submit", async (event) => {
           outside: true,
         });
         await refresh();
-        navigate("payments");
+        navigate(state.user.role === "fighter" ? "fighter" : "account");
         flash(
-          "Guest application created. Complete the fee and administrator review before registering this competitor.",
+          "Guest application created. Awaiting administrator approval before registering this competitor.",
         );
         return;
       case "bout":
@@ -238,10 +233,6 @@ document.addEventListener("submit", async (event) => {
         await api("fighters/" + form.dataset.athlete + "/profile", "PUT", data);
         message = "Fighter details updated.";
         break;
-      case "finance-report":
-        setFinance(await api("finance/report", "POST", data), data);
-        render();
-        return;
       case "rankings":
         await api("rankings", "PUT", data);
         break;
@@ -284,68 +275,26 @@ document.addEventListener("click", async (event) => {
         setApplicationFilter(action.dataset.value);
         render();
         break;
-      case "start-checkout": {
+      case "gym-invite": {
         action.disabled = true;
-        const checkout = await api(
-          "applications/" + action.dataset.athlete + "/checkout",
-          "POST",
-          {},
-        );
-        if (checkout.url) {
-          location.assign(checkout.url);
-          return;
-        }
+        const resp = await api("gym_enquiries/" + action.dataset.enquiry + "/invite", "POST", {});
         await refresh();
-        if (checkout.already_paid) {
-          flash("This application fee has already been paid.");
-          break;
-        }
-        navigate(checkout.checkout_route);
+        flash("Onboarding link sent. Public URL: " + resp.onboarding_url);
         break;
       }
-      case "demo-pay": {
-        if (!document.querySelector("#demo-payment-consent")?.checked)
-          throw new Error(
-            "Confirm that you understand this is a test payment.",
-          );
+      case "gym-approve": {
         action.disabled = true;
-        await api(
-          "payments/" + action.dataset.payment + "/demo-confirm",
-          "POST",
-          { confirm: true },
-        );
+        const resp = await api("gym_enquiries/" + action.dataset.enquiry + "/approve", "POST", {});
         await refresh();
-        navigate(state.user.role === "fighter" ? "fighter" : "payments");
-        flash(
-          "Test payment recorded. The application is now awaiting administrator approval. No money was charged.",
-        );
+        flash("Gym approved. Temporary coach password: " + resp.temp_password + " (also emailed).");
         break;
       }
-      case "cancel-checkout":
-        await api("payments/" + action.dataset.payment + "/cancel", "POST", {});
+      case "gym-reject": {
+        const note = window.prompt("Reason for rejection (shown to the gym)?") || "";
+        action.disabled = true;
+        await api("gym_enquiries/" + action.dataset.enquiry + "/reject", "POST", { note });
         await refresh();
-        navigate("payments");
-        flash("Test checkout cancelled. No payment was recorded.");
-        break;
-      case "finance-export": {
-        const response = await fetch("/api/portal/finance/export", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Requested-With": "fetch",
-          },
-          body: JSON.stringify(financeFilters),
-        });
-        if (!response.ok) {
-          const error = await response.json();
-          throw new Error(error.error);
-        }
-        const url = URL.createObjectURL(await response.blob());
-        const link = document.createElement("a");
-        link.href = url;
-        link.download = "WUCO-payments.csv";
-        link.click();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        flash("Enquiry marked as rejected.");
         break;
       }
       case "withdraw-entry": {
@@ -454,19 +403,6 @@ window.addEventListener("hashchange", async () => {
 });
 async function start() {
   await refresh();
-  const session = new URLSearchParams(location.search).get("session_id");
-  if (session && state.user) {
-    try {
-      await api("payments/sync", "POST", { session_id: session });
-      await refresh();
-      flash("Payment status checked with the provider.");
-    } catch (error) {
-      flash(error.message, true);
-    }
-    const url = new URL(location.href);
-    url.searchParams.delete("session_id");
-    history.replaceState(null, "", url);
-  }
 }
 start().catch((error) => {
   root.innerHTML =

@@ -1,8 +1,18 @@
-"""Private applications, paid review queue and administrator-managed fighter profiles."""
+"""Private applications and administrator-managed fighter profiles."""
 from portal import Error, one, require, rows, number, text
 from .categories import category
 
-STATUSES=('awaiting_payment','pending_approval','approved','rejected','suspended')
+STATUSES=('pending_approval','approved','rejected','suspended')
+
+def _assign_passport(db, aid):
+    """Issue IRL-000NNN on first approval; idempotent on re-approval."""
+    existing = db.execute('SELECT fighter_no FROM fighter_passports WHERE athlete_id=?',(aid,)).fetchone()
+    if existing:
+        return existing['fighter_no']
+    nxt = db.execute("SELECT coalesce(max(cast(substr(fighter_no,5) AS INTEGER)),0)+1 AS n FROM fighter_passports WHERE fighter_no LIKE 'IRL-%'").fetchone()['n']
+    fighter_no = f'IRL-{nxt:06d}'
+    db.execute('INSERT INTO fighter_passports(athlete_id,fighter_no) VALUES(?,?)',(aid,fighter_no))
+    return fighter_no
 
 def application(db,aid):
     return one(db,'''SELECT f.*,a.name,a.nickname,a.division,a.country,a.biography,a.portrait_url,
@@ -17,27 +27,19 @@ def owns_application(db,user,aid):
         raise Error('This application belongs to another account',403)
     return app
 
-def has_payment(db,aid):
-    import os
-    live=os.environ.get('WUCO_PAYMENT_MODE')=='stripe' and os.environ.get('STRIPE_SECRET_KEY','').startswith('sk_live_')
-    return bool(db.execute("SELECT 1 FROM payments WHERE athlete_id=? AND status='paid' AND refunded_cents<amount_cents AND (?=0 OR is_test=0)",(aid,int(live))).fetchone())
-
 def approved(db,aid):
-    row=db.execute('SELECT approval_status,legacy_member FROM fighter_profiles WHERE athlete_id=?',(aid,)).fetchone()
-    # Historical seeded athletes without accounts were already part of the roster.
-    return row is None or (row['approval_status']=='approved' and (row['legacy_member'] or has_payment(db,aid)))
+    row=db.execute('SELECT approval_status FROM fighter_profiles WHERE athlete_id=?',(aid,)).fetchone()
+    # Historical seeded athletes without a profile row are considered part of the roster.
+    return row is None or row['approval_status']=='approved'
 
 def require_approved(db,aid):
-    if not approved(db,aid):raise Error('This fighter must pay the application fee and receive administrator approval before entering events or rankings.',409)
+    if not approved(db,aid):raise Error('This fighter must be approved by an administrator before entering events or rankings.',409)
 
 def overview(db,user):
     require(user,'admin')
-    return rows(db,'''SELECT f.*,a.name,a.division,a.country,a.portrait_url,u.email,
-        (SELECT receipt_number FROM payments p WHERE p.athlete_id=f.athlete_id AND p.status='paid' AND p.refunded_cents<p.amount_cents LIMIT 1) AS receipt_number,
-        (SELECT id FROM payments p WHERE p.athlete_id=f.athlete_id AND p.status='paid' AND p.refunded_cents<p.amount_cents LIMIT 1) AS payment_id,
-        (SELECT is_test FROM payments p WHERE p.athlete_id=f.athlete_id AND p.status='paid' AND p.refunded_cents<p.amount_cents LIMIT 1) AS payment_is_test
+    return rows(db,'''SELECT f.*,a.name,a.division,a.country,a.portrait_url,a.class_code,a.martial_art,u.email
         FROM fighter_profiles f JOIN athletes a ON a.id=f.athlete_id LEFT JOIN portal_users u ON u.id=f.user_id
-        ORDER BY CASE f.approval_status WHEN 'pending_approval' THEN 0 WHEN 'awaiting_payment' THEN 1 ELSE 2 END,a.name''')
+        ORDER BY CASE f.approval_status WHEN 'pending_approval' THEN 0 ELSE 1 END,a.name''')
 
 def dispatch(db,user,method,path,data):
     require(user,'admin')
@@ -49,17 +51,20 @@ def dispatch(db,user,method,path,data):
         decision=data.get('decision')
         if decision not in ('approved','rejected','suspended'):raise Error('Choose approve, reject or suspend')
         note=text(data,'note',2000,decision!='approved')
-        if decision=='approved' and not app['legacy_member'] and not has_payment(db,aid):
-            raise Error('The EUR 10 application fee has not been paid. Approval is blocked.',409)
         if decision=='approved' and app['approval_status'] not in ('pending_approval','suspended','approved','rejected'):
-            raise Error('Only a paid pending application or suspended member can be approved',409)
+            raise Error('Only a pending application or suspended member can be approved',409)
         db.execute('UPDATE fighter_profiles SET approval_status=?,reviewed_by=?,reviewed_at=CURRENT_TIMESTAMP,review_note=? WHERE athlete_id=?',(decision,user['id'],note,aid))
         db.execute('INSERT INTO application_audit(athlete_id,actor_id,action,note) VALUES(?,?,?,?)',(aid,user['id'],decision,note))
+        if decision=='approved':
+            _assign_passport(db, aid)
         return {'ok':True,'status':decision}
     if method=='PUT' and parts[2]=='profile':
+        from portal import fighter_class
         clean={}
-        for key,limit in [('name',120),('nickname',120),('country',60),('biography',2000)]:
+        for key,limit in [('name',120),('nickname',120),('country',60),('biography',2000),('martial_art',120)]:
             if key in data:clean[key]=text(data,key,limit,key in ('name','country'))
+        if 'class_code' in data:
+            clean['class_code']=fighter_class(data['class_code'])
         if 'division' in data:
             clean['division']=category(data['division'])
             old=one(db,'SELECT division FROM athletes WHERE id=?',(aid,))['division']

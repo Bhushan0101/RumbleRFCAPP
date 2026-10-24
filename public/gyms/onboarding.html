@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0a2f23">
+<title>Gym onboarding | W.U.C.O</title>
+<link rel="stylesheet" href="../style.css">
+<style>
+body{background:#f4f1ea;color:#0a1510}
+.ob-shell{max-width:900px;margin:0 auto;padding:48px 24px 80px}
+.ob-head{text-align:center;margin-bottom:28px}
+.ob-head img{width:60px;height:60px;object-fit:contain;display:block;margin:0 auto 10px}
+.ob-head h1{font-family:'Barlow Condensed',Impact,sans-serif;font-size:40px;letter-spacing:2px;color:#0a2f23;margin:0}
+.ob-head p{color:#4a5c54;font-size:13px}
+.ob-card{background:#fff;border:1px solid #dcd4c4;padding:30px;margin-bottom:18px}
+.ob-card h2{font-family:'Barlow Condensed',Impact,sans-serif;letter-spacing:2px;font-size:22px;color:#0a2f23;margin:0 0 16px;border-bottom:2px solid #d4af37;padding-bottom:8px;display:inline-block}
+label{display:block;font-family:'Barlow Condensed',Impact,sans-serif;letter-spacing:1.5px;font-size:12px;color:#0a2f23;margin:12px 0 6px}
+input,textarea,select{width:100%;padding:12px 14px;border:1px solid #cfc6b4;background:#fff;font:14px Barlow,sans-serif}
+textarea{min-height:100px;resize:vertical}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.four{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;align-items:end}
+.six{display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 2fr auto;gap:8px;align-items:end}
+.remove{background:#8d2626;color:#fff;border:0;padding:12px;font:700 11px 'Barlow Condensed',Impact,sans-serif;letter-spacing:1.5px;cursor:pointer}
+.add{background:transparent;color:#0a2f23;border:1px dashed #0a2f23;padding:10px 16px;font:700 11px 'Barlow Condensed',Impact,sans-serif;letter-spacing:1.5px;margin-top:10px;cursor:pointer}
+.submit-row{display:flex;gap:16px;align-items:center;margin-top:24px}
+.submit-row button{background:#0a2f23;color:#d4af37;padding:16px 32px;font:700 12px 'Barlow Condensed',Impact,sans-serif;letter-spacing:2px;border:0;cursor:pointer}
+.submit-row button:disabled{opacity:.5;cursor:wait}
+.flash{display:none;padding:14px 18px;background:#1a5a44;color:#fff;margin-bottom:18px}
+.flash.show{display:block}
+.flash.error{background:#8d2626}
+.row{margin-top:12px}
+.hint{color:#4a5c54;font-size:12px;margin-top:6px}
+@media(max-width:860px){.two,.four,.six{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="ob-shell">
+  <div class="ob-head">
+    <img src="../assets/logos/wuco-mark.png" alt="">
+    <h1>GYM ONBOARDING</h1>
+    <p id="greeting">Loading your invitation…</p>
+  </div>
+  <div id="flash" class="flash"></div>
+  <div id="main" hidden>
+    <form id="form">
+      <section class="ob-card">
+        <h2>Gym details</h2>
+        <label>Gym name</label><input name="name" id="f-name" maxlength="120" required>
+        <div class="two">
+          <div><label>City</label><input name="city" id="f-city" maxlength="120"></div>
+          <div><label>Revolut handle or URL</label><input name="revolut_handle" id="f-revolut" maxlength="60" placeholder="revolut.me/yourgym"></div>
+        </div>
+        <label>About your gym</label>
+        <textarea name="about" id="f-about" maxlength="2000" placeholder="Short description shown on your public page."></textarea>
+        <p class="hint">Logo, hero and timetable images can be uploaded by your coach account once the gym is approved.</p>
+      </section>
+      <section class="ob-card">
+        <h2>Pricing products</h2>
+        <p class="hint">Set the prices you want to charge for passes and per-class drop-ins. Revolut links can be the gym's single handle or per-product.</p>
+        <div id="products"></div>
+        <button type="button" class="add" id="add-product">+ Add pricing product</button>
+      </section>
+      <section class="ob-card">
+        <h2>Weekly timetable (optional)</h2>
+        <p class="hint">Fill in each weekly class slot. You can edit this after approval.</p>
+        <div id="classes"></div>
+        <button type="button" class="add" id="add-class">+ Add class</button>
+      </section>
+      <div class="submit-row">
+        <button type="submit">Submit onboarding →</button>
+        <span class="hint">Your W.U.C.O admin will review and activate your gym page.</span>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const PRODUCT_KINDS = [
+  {id:'day_pass',name:'Single day pass'},
+  {id:'weekly_pass',name:'Weekly pass'},
+  {id:'monthly_pass',name:'Monthly pass'},
+  {id:'per_class',name:'Per-class drop-in'},
+];
+const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const token = new URLSearchParams(location.search).get('token') || '';
+const flash = document.querySelector('#flash');
+
+function productRow(p={}) {
+  const kind = p.kind || 'day_pass';
+  return `<div class="four product-row">
+    <div><label>Title</label><input class="p-title" value="${esc(p.title||PRODUCT_KINDS.find(k=>k.id===kind).name)}" maxlength="120" required></div>
+    <div><label>Type</label><select class="p-kind">${PRODUCT_KINDS.map(k=>`<option value="${k.id}" ${k.id===kind?'selected':''}>${k.name}</option>`).join('')}</select></div>
+    <div><label>Price €</label><input class="p-price" type="number" min="0" step="0.5" value="${(p.price_cents||0)/100}" required></div>
+    <div style="display:flex;gap:6px;align-items:end"><div style="flex:1"><label>Revolut URL</label><input class="p-revolut" value="${esc(p.revolut_url||'')}" placeholder="revolut.me/handle"></div><button type="button" class="remove">×</button></div>
+  </div>`;
+}
+function classRow(c={}) {
+  return `<div class="six class-row">
+    <div><label>Title</label><input class="c-title" value="${esc(c.title||'')}" maxlength="120" required></div>
+    <div><label>Discipline</label><input class="c-discipline" value="${esc(c.discipline||'')}" maxlength="120" placeholder="K-1 / Jiu Jitsu / …"></div>
+    <div><label>Day</label><select class="c-day">${DAYS.map((d,i)=>`<option value="${i}" ${i===(c.day_of_week||0)?'selected':''}>${d}</option>`).join('')}</select></div>
+    <div><label>Start</label><input class="c-start" type="time" value="${esc(c.start_time||'18:00')}" required></div>
+    <div><label>Mins</label><input class="c-duration" type="number" min="10" max="300" value="${c.duration_minutes||60}" required></div>
+    <div><label>Capacity</label><input class="c-capacity" type="number" min="1" max="500" value="${c.capacity||20}"></div>
+    <div style="display:flex;gap:4px;align-items:end"><button type="button" class="remove">×</button></div>
+  </div>`;
+}
+function addProduct(p) { document.querySelector('#products').insertAdjacentHTML('beforeend', productRow(p)); }
+function addClass(c) { document.querySelector('#classes').insertAdjacentHTML('beforeend', classRow(c)); }
+
+document.addEventListener('click', (e) => {
+  if (e.target.id === 'add-product') addProduct();
+  else if (e.target.id === 'add-class') addClass();
+  else if (e.target.classList && e.target.classList.contains('remove')) {
+    const row = e.target.closest('.product-row,.class-row');
+    if (row) row.remove();
+  }
+});
+
+async function boot() {
+  if (!token) {
+    flash.className = 'flash error show';
+    flash.textContent = 'Missing onboarding token in the URL.';
+    document.querySelector('#greeting').textContent = '';
+    return;
+  }
+  try {
+    const res = await fetch('/api/portal/gym_onboarding/lookup', {
+      method: 'POST', headers: {'Content-Type':'application/json','X-Requested-With':'fetch'},
+      body: JSON.stringify({token}),
+    });
+    const info = await res.json();
+    if (!res.ok) throw new Error(info.error || 'Invalid link');
+    document.querySelector('#greeting').textContent = `${info.contact_name}, finish setting up ${info.gym_name}.`;
+    document.querySelector('#f-name').value = info.gym_name || '';
+    document.querySelector('#f-city').value = info.city || '';
+    document.querySelector('#main').hidden = false;
+    PRODUCT_KINDS.forEach(k => addProduct({kind:k.id, title:k.name, price_cents:0}));
+  } catch (err) {
+    flash.className = 'flash error show';
+    flash.textContent = err.message;
+    document.querySelector('#greeting').textContent = '';
+  }
+}
+
+document.querySelector('#form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type=submit]');
+  btn.disabled = true;
+  flash.className = 'flash';
+  const products = [...document.querySelectorAll('.product-row')].map(r => ({
+    kind: r.querySelector('.p-kind').value,
+    title: r.querySelector('.p-title').value.trim(),
+    price_cents: Math.round(parseFloat(r.querySelector('.p-price').value || '0') * 100),
+    revolut_url: r.querySelector('.p-revolut').value.trim(),
+  }));
+  const classes = [...document.querySelectorAll('.class-row')].map(r => ({
+    title: r.querySelector('.c-title').value.trim(),
+    discipline: r.querySelector('.c-discipline').value.trim(),
+    day_of_week: parseInt(r.querySelector('.c-day').value, 10),
+    start_time: r.querySelector('.c-start').value,
+    duration_minutes: parseInt(r.querySelector('.c-duration').value, 10),
+    capacity: parseInt(r.querySelector('.c-capacity').value, 10),
+  }));
+  const payload = {
+    token,
+    name: document.querySelector('#f-name').value.trim(),
+    city: document.querySelector('#f-city').value.trim(),
+    revolut_handle: document.querySelector('#f-revolut').value.trim(),
+    about: document.querySelector('#f-about').value.trim(),
+    products, classes,
+  };
+  try {
+    const res = await fetch('/api/portal/gym_onboarding/submit', {
+      method: 'POST', headers: {'Content-Type':'application/json','X-Requested-With':'fetch'},
+      body: JSON.stringify(payload),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || 'Submission failed');
+    flash.className = 'flash show';
+    flash.textContent = 'Thank you — your onboarding has been submitted for review. You will receive your coach account by email once approved.';
+    document.querySelector('#form').style.display = 'none';
+  } catch (err) {
+    flash.className = 'flash error show';
+    flash.textContent = err.message;
+    btn.disabled = false;
+  }
+});
+boot();
+</script>
+</body>
+</html>

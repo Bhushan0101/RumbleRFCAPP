@@ -8,24 +8,43 @@ import {
   table,
   badge,
 } from "./shared.js";
-import { money, statusLabel } from "./payments.js";
+
+const STATUS_LABEL = {
+  pending_approval: "Pending approval",
+  approved: "Approved",
+  rejected: "Declined",
+  suspended: "Suspended",
+};
+
+const CLASS_LABEL = {
+  J: "J-Class (U18)",
+  N: "N-Class (≤5 fights)",
+  L: "L-Class (Learning)",
+  C: "C-Class (No shin pads)",
+  B: "B-Class (Debut pro)",
+  A: "A-Class (Seasoned pro)",
+};
+
+const CLASS_OPTIONS = [
+  { id: "", name: "No class set" },
+  { id: "J", name: "J-Class (U18)" },
+  { id: "N", name: "N-Class (≤5 fights)" },
+  { id: "L", name: "L-Class (Learning)" },
+  { id: "C", name: "C-Class (No shin pads)" },
+  { id: "B", name: "B-Class (Debut pro)" },
+  { id: "A", name: "A-Class (Seasoned pro)" },
+];
+
 let filter = "pending_approval";
-let financeData = null;
-export let financeFilters = { from: "", to: "" };
 export function setApplicationFilter(value) {
   filter = value;
-}
-export function setFinance(data, filters = financeFilters) {
-  financeData = data;
-  financeFilters = filters;
 }
 export function applicationsPage() {
   const list = (state.applications || []).filter(
     (a) => filter === "all" || a.approval_status === filter,
   );
-  return `<div class="page-heading"><div><span class="overline">ADMINISTRATOR WORKSPACE</span><h1>Fighter management.</h1><p class="intro">Review paid applications and manage approved profiles. The payment check is enforced by the server.</p></div><a class="button secondary" href="#finance">Finance & receipts →</a></div><nav class="application-tabs" aria-label="Application status">${[
-    ["pending_approval", "Ready for review"],
-    ["awaiting_payment", "Fee due"],
+  return `<div class="page-heading"><div><span class="overline">ADMINISTRATOR WORKSPACE</span><h1>Fighter management.</h1><p class="intro">Review applications and manage approved profiles.</p></div></div><nav class="application-tabs" aria-label="Application status">${[
+    ["pending_approval", "Pending approval"],
     ["approved", "Approved"],
     ["rejected", "Declined"],
     ["suspended", "Suspended"],
@@ -39,31 +58,67 @@ export function applicationsPage() {
     list
       .map(
         (a) =>
-          `<section class="panel"><div class="profile-identity">${avatar({ name: a.name, portrait_url: a.portrait_url }, "avatar-large")}<div><h2>${esc(a.name)}</h2><p class="muted">${esc(a.email || "Guest application")} · ${esc(a.division)}</p>${badge(statusLabel(a.approval_status))}</div></div><div class="payment-check">${a.legacy_member ? "Existing member · no new fee required" : a.receipt_number ? `${a.payment_is_test ? "TEST payment" : "Payment"} received · €10 <a href="/api/portal/payments/${a.payment_id}/receipt" download>Receipt ↓</a>` : "Application fee not paid · approval blocked"}</div>${a.review_note ? `<p class="muted">Admin note: ${esc(a.review_note)}</p>` : ""}${
-            a.approval_status !== "awaiting_payment"
-              ? `<form data-form="fighter-review" data-athlete="${a.athlete_id}">${select(
-                  "Decision",
-                  "decision",
-                  (a.approval_status === "approved"
-                    ? [["suspended", "Suspend profile"]]
-                    : [
-                        ["approved", "Approve fighter"],
-                        ["rejected", "Decline application"],
-                      ]
-                  ).map(([id, name]) => ({ id, name })),
-                  "",
-                  true,
-                )}<label>Review note<textarea name="note" maxlength="2000" placeholder="Required for a decline or suspension; visible to the applicant."></textarea></label><button class="button primary">Save review decision</button></form>`
-              : ""
-          }<details><summary>Edit fighter profile</summary><form data-form="admin-fighter-profile" data-athlete="${a.athlete_id}"><div class="two">${field("Full name", "name", a.name)}${categorySelect(a.division)}${field("Country", "country", a.country)}</div><button class="button secondary">Save fighter details</button></form></details></section>`,
+          `<section class="panel"><div class="profile-identity">${avatar({ name: a.name, portrait_url: a.portrait_url }, "avatar-large")}<div><h2>${esc(a.name)}</h2><p class="muted">${esc(a.email || "Guest application")} · ${esc(a.martial_art || "Martial art not set")} · ${esc(CLASS_LABEL[a.class_code] || "No class")}</p>${badge(STATUS_LABEL[a.approval_status] || a.approval_status)}</div></div>${a.review_note ? `<p class="muted">Admin note: ${esc(a.review_note)}</p>` : ""}<form data-form="fighter-review" data-athlete="${a.athlete_id}">${select(
+            "Decision",
+            "decision",
+            (a.approval_status === "approved"
+              ? [["suspended", "Suspend profile"]]
+              : [
+                  ["approved", "Approve fighter"],
+                  ["rejected", "Decline application"],
+                ]
+            ).map(([id, name]) => ({ id, name })),
+            "",
+            true,
+          )}<label>Review note<textarea name="note" maxlength="2000" placeholder="Required for a decline or suspension; visible to the applicant."></textarea></label><button class="button primary">Save review decision</button></form><details><summary>Edit fighter profile</summary><form data-form="admin-fighter-profile" data-athlete="${a.athlete_id}"><div class="two">${field("Full name", "name", a.name)}${field("Martial art", "martial_art", a.martial_art || "", "text", false)}${select("Class", "class_code", CLASS_OPTIONS, a.class_code || "", false)}${categorySelect(a.division)}${field("Country", "country", a.country)}</div><button class="button secondary">Save fighter details</button></form></details></section>`,
       )
       .join("") ||
-    '<section class="panel empty-state"><h2>No applications in this view.</h2><p>Paid applications appear under Ready for review.</p></section>'
+    '<section class="panel empty-state"><h2>No applications in this view.</h2><p>New registrations appear under Pending approval.</p></section>'
   }</div>`;
 }
-export function financePage() {
-  const data = financeData;
-  if (!data)
-    return '<section class="panel"><h1>Finance & receipts.</h1><p>Loading payment records…</p></section>';
-  return `<div class="page-heading"><div><span class="overline">ADMINISTRATOR · FINANCE</span><h1>Payments & receipts.</h1><p class="intro">Live receipts and simulated test payments are reported separately. Amounts are in EUR.</p></div><button class="button secondary" data-action="finance-export">Download CSV ↓</button></div><form data-form="finance-report" class="finance-filters"><div class="two">${field("From date", "from", financeFilters.from, "date", false)}${field("To date", "to", financeFilters.to, "date", false)}</div><button class="button secondary">Apply date filter</button></form><div class="finance-metrics"><section class="panel"><span class="overline">LIVE GROSS RECEIPTS</span><strong>${money(data.live.gross_cents)}</strong><p class="muted">${data.live.paid_count} confirmed live payments</p></section><section class="panel"><span class="overline">LIVE REFUNDS</span><strong>${money(data.live.refund_cents)}</strong><p class="muted">Provider-reported refunds</p></section><section class="panel"><span class="overline">LIVE NET RECEIPTS</span><strong>${money(data.live.net_cents)}</strong><p class="muted">Before provider fees and tax adjustments</p></section><section class="panel test-metric"><span class="overline">TEST PAYMENTS ONLY</span><strong>${money(data.test.gross_cents)}</strong><p class="muted">${data.test.paid_count} simulated / provider test payments · not real revenue</p></section></div><section class="panel"><h2>Payment ledger</h2>${table(["Receipt / date", "Fighter / payer", "Amount", "Status", "Mode", "Download"], data.payments.map((p) => `<tr><td>${esc(p.receipt_number || "Checkout #" + p.id)}<small class="cell-note">${esc(p.paid_at || p.created_at)}</small></td><td>${esc(p.fighter_name)}<small class="cell-note">${esc(p.payer_name)} · ${esc(p.payer_email)}</small></td><td>${money(p.amount_cents)}${p.refunded_cents ? '<small class="cell-note">Refunded ' + money(p.refunded_cents) + "</small>" : ""}</td><td>${esc(p.status)}${p.duplicate_application_payment ? '<small class="cell-note">Duplicate fee: review/refund required</small>' : ""}</td><td>${badge(p.is_test ? "TEST" : "LIVE")}</td><td>${p.status === "paid" ? `<a href="/api/portal/payments/${p.id}/receipt" download>PDF ↓</a>` : "—"}</td></tr>`).join(""))}</section>`;
+
+const ENQUIRY_LABEL = {
+  new: "New enquiry",
+  invited: "Onboarding link sent",
+  onboarding: "Form in progress",
+  submitted: "Awaiting approval",
+  approved: "Approved",
+  rejected: "Rejected",
+};
+
+export function gymEnquiriesPage() {
+  const list = state.gym_enquiries || [];
+  return `<div class="page-heading"><div><span class="overline">ADMINISTRATOR WORKSPACE</span><h1>Gym enquiries.</h1><p class="intro">Review new gym enquiries, send the onboarding link, and approve submissions to create a coach account.</p></div><a class="button secondary" href="/gyms/join.html" target="_blank">Public enquiry page ↗</a></div><div class="application-grid">${
+    list.map((e) =>
+      `<section class="panel"><div><h2>${esc(e.gym_name)}</h2><p class="muted">${esc(e.contact_name)} · <a href="mailto:${esc(e.contact_email)}">${esc(e.contact_email)}</a>${e.phone ? " · " + esc(e.phone) : ""}${e.city ? " · " + esc(e.city) : ""}</p>${badge(ENQUIRY_LABEL[e.status] || e.status)}</div>${e.message ? `<p class="muted">“${esc(e.message)}”</p>` : ""}${e.review_note ? `<p class="muted">Admin note: ${esc(e.review_note)}</p>` : ""}<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:14px">${
+        e.status === "new"
+          ? `<button class="button primary" data-action="gym-invite" data-enquiry="${e.id}">Send onboarding link</button><button class="button ghost" data-action="gym-reject" data-enquiry="${e.id}">Reject</button>`
+          : e.status === "invited" || e.status === "onboarding"
+            ? `<button class="button secondary" data-action="gym-invite" data-enquiry="${e.id}">Resend link</button><span class="muted">Awaiting submission</span>`
+            : e.status === "submitted"
+              ? `<button class="button primary" data-action="gym-approve" data-enquiry="${e.id}">Approve &amp; create coach account</button><button class="button ghost" data-action="gym-reject" data-enquiry="${e.id}">Reject</button>`
+              : `<span class="muted">${esc(ENQUIRY_LABEL[e.status] || e.status)}</span>`
+      }</div></section>`,
+    ).join("") || '<section class="panel empty-state"><h2>No gym enquiries yet.</h2><p>Share the public gym enquiry page with prospective clubs to collect leads.</p></section>'
+  }</div>`;
+}
+
+export function notificationsPage() {
+  const list = state.notifications || [];
+  const CATEGORY_LABEL = {
+    fighter_signup: "Fighter signup",
+    fighter_approved: "Fighter approved",
+    fighter_rejected: "Fighter declined",
+    gym_enquiry: "Gym enquiry",
+    gym_onboarding: "Onboarding link sent",
+    gym_submitted: "Gym onboarding submitted",
+    gym_approved: "Gym approved",
+    gym_join_request: "Gym join request",
+    class_booking: "Class booking",
+  };
+  return `<div class="page-heading"><div><span class="overline">ADMINISTRATOR WORKSPACE</span><h1>Notifications.</h1><p class="intro">Outbound mail is logged here (and to <code>logs/outbound_mail.log</code>) until SMTP is wired up.</p></div></div>${
+    list.length
+      ? `<section class="panel">${table(["When", "To", "Subject", "Category"], list.map((m) => `<tr><td><small>${esc(m.created_at)}</small></td><td>${esc(m.to_address)}</td><td>${esc(m.subject)}<details><summary>Body</summary><pre style="white-space:pre-wrap;font:12px Barlow;margin:8px 0">${esc(m.body)}</pre></details></td><td>${esc(CATEGORY_LABEL[m.category] || m.category)}</td></tr>`).join(""))}</section>`
+      : '<section class="panel empty-state"><h2>Inbox is empty.</h2><p>Fighter signups and gym events will show here.</p></section>'
+  }`;
 }

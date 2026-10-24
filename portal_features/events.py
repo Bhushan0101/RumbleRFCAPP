@@ -117,9 +117,9 @@ def dispatch_event(db,user,method,path,data):
         if data.get('outside') is True:
             owned_event(db,user,eid)
             aid=create_athlete(db,data)
-            db.execute("INSERT INTO fighter_profiles(athlete_id,approval_status,legacy_member,created_by) VALUES(?,'awaiting_payment',0,?)",(aid,user['id']))
+            db.execute("INSERT INTO fighter_profiles(athlete_id,approval_status,legacy_member,created_by) VALUES(?,'pending_approval',0,?)",(aid,user['id']))
             db.execute("INSERT INTO application_audit(athlete_id,actor_id,action) VALUES(?,?,'guest_application_created')",(aid,user['id']))
-            return {'athlete_id':aid,'application_pending':True,'message':'Guest application created. Pay the application fee and obtain administrator approval before adding the entry.'}
+            return {'athlete_id':aid,'application_pending':True,'message':'Guest application created. Obtain administrator approval before adding the entry.'}
         aid=number(data.get('athlete_id'));entry_authorized(db,user,eid,aid)
         require_approved(db,aid)
         athlete=one(db,'SELECT division FROM athletes WHERE id=?',(aid,))

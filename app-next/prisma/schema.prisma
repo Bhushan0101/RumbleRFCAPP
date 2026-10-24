@@ -1,0 +1,374 @@
+// W.U.C.O Ireland — Prisma schema (SQLite port of migrations 001-010).
+// SQLite now; swap to postgres by changing `provider` + DATABASE_URL.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Users & sessions
+// ---------------------------------------------------------------------------
+
+model PortalUser {
+  id            Int      @id @default(autoincrement())
+  email         String   @unique
+  name          String
+  // 'admin' | 'promoter' | 'fighter' | 'gym' | 'coach'
+  role          String
+  salt          String
+  passwordHash  String
+  createdAt     DateTime @default(now())
+
+  fighterProfile    FighterProfile?       @relation("FighterUser")
+  createdProfiles   FighterProfile[]      @relation("CreatedBy")
+  reviewedProfiles  FighterProfile[]      @relation("ReviewedBy")
+  ownedGyms         Gym[]                 @relation("GymOwner")
+  coachOf           Coach[]
+  promotions        Promotion[]
+  joinRequests      GymJoinRequest[]      @relation("Fighter")
+  reviewedJoins     GymJoinRequest[]      @relation("Reviewer")
+  bookings          ClassBooking[]
+  applicationAudit  ApplicationAudit[]
+  invitedEnquiries  GymEnquiry[]          @relation("Invited")
+  reviewedEnquiries GymEnquiry[]          @relation("Reviewed")
+
+  @@map("portal_users")
+}
+
+model Session {
+  tokenHash String   @id
+  userId    Int
+  expiresAt Int
+  @@map("portal_sessions")
+}
+
+// ---------------------------------------------------------------------------
+// Athletes & passports
+// ---------------------------------------------------------------------------
+
+model Athlete {
+  id           Int      @id @default(autoincrement())
+  name         String
+  nickname     String   @default("")
+  division     String   @default("Featherweight")
+  country      String   @default("")
+  wins         Int      @default(0)
+  losses       Int      @default(0)
+  draws        Int      @default(0)
+  biography    String?
+  portraitUrl  String?
+  cartoonUrl   String?
+  isSample     Int      @default(1)
+  displayOrder Int      @default(0)
+  classCode    String?  // 'J' | 'N' | 'L' | 'C' | 'B' | 'A'
+  martialArt   String   @default("")
+
+  profile    FighterProfile?
+  passport   FighterPassport?
+  rankings   Ranking[]
+  boutsRed   Bout[]           @relation("Red")
+  boutsBlue  Bout[]           @relation("Blue")
+  wonBouts   Bout[]           @relation("Winner")
+  entries    EventRegistration[]
+  audits     ApplicationAudit[]
+
+  @@map("athletes")
+}
+
+model FighterProfile {
+  athleteId       Int      @id
+  userId          Int?     @unique
+  gymId           Int?
+  coachId         Int?
+  approvalStatus  String   @default("pending_approval")
+  legacyMember    Int      @default(1)
+  createdById     Int?
+  reviewedById    Int?
+  reviewedAt      DateTime?
+  reviewNote      String   @default("")
+
+  athlete    Athlete     @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  user       PortalUser? @relation("FighterUser", fields: [userId], references: [id])
+  gym        Gym?        @relation(fields: [gymId], references: [id])
+  coach      Coach?      @relation(fields: [coachId], references: [id])
+  createdBy  PortalUser? @relation("CreatedBy", fields: [createdById], references: [id])
+  reviewedBy PortalUser? @relation("ReviewedBy", fields: [reviewedById], references: [id])
+
+  @@map("fighter_profiles")
+}
+
+model FighterPassport {
+  athleteId Int      @id
+  fighterNo String   @unique
+  issuedAt  DateTime @default(now())
+  athlete   Athlete  @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  @@map("fighter_passports")
+}
+
+model ApplicationAudit {
+  id        Int      @id @default(autoincrement())
+  athleteId Int
+  actorId   Int?
+  action    String
+  note      String   @default("")
+  createdAt DateTime @default(now())
+  athlete   Athlete     @relation(fields: [athleteId], references: [id])
+  actor     PortalUser? @relation(fields: [actorId], references: [id])
+  @@map("application_audit")
+}
+
+// ---------------------------------------------------------------------------
+// Gyms, products, classes, bookings
+// ---------------------------------------------------------------------------
+
+model Gym {
+  id                 Int     @id @default(autoincrement())
+  ownerId            Int?    @unique
+  name               String
+  city               String  @default("")
+  joinCode           String? @unique
+  logoUrl            String?
+  heroUrl            String?
+  about              String  @default("")
+  revolutHandle      String  @default("")
+  timetableImageUrl  String?
+  slug               String? @unique
+  status             String  @default("active")
+  contactEmail       String  @default("")
+
+  owner      PortalUser?       @relation("GymOwner", fields: [ownerId], references: [id])
+  coaches    Coach[]
+  fighters   FighterProfile[]
+  products   GymProduct[]
+  classes    GymClass[]
+  joinReqs   GymJoinRequest[]
+
+  @@map("gyms")
+}
+
+model Coach {
+  id      Int    @id @default(autoincrement())
+  userId  Int    @unique
+  gymId   Int?
+  name    String
+  user    PortalUser @relation(fields: [userId], references: [id])
+  gym     Gym?       @relation(fields: [gymId], references: [id])
+  fighters FighterProfile[]
+  @@map("coaches")
+}
+
+model GymProduct {
+  id          Int     @id @default(autoincrement())
+  gymId       Int
+  // 'day_pass' | 'weekly_pass' | 'monthly_pass' | 'per_class'
+  kind        String
+  title       String
+  priceCents  Int
+  currency    String  @default("EUR")
+  revolutUrl  String  @default("")
+  active      Int     @default(1)
+  gym         Gym     @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  @@map("gym_products")
+}
+
+model GymClass {
+  id                Int     @id @default(autoincrement())
+  gymId             Int
+  title             String
+  discipline        String  @default("")
+  dayOfWeek         Int
+  startTime         String
+  durationMinutes   Int
+  capacity          Int     @default(20)
+  perClassPriceCents Int?
+  revolutUrl        String  @default("")
+  colour            String  @default("")
+  gym               Gym            @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  bookings          ClassBooking[]
+  @@map("gym_classes")
+}
+
+model ClassBooking {
+  id            Int      @id @default(autoincrement())
+  classId       Int
+  userId        Int?
+  guestName     String   @default("")
+  guestEmail    String   @default("")
+  bookedForDate String
+  status        String   @default("pending_payment")
+  createdAt     DateTime @default(now())
+  markedPaidAt  DateTime?
+  class         GymClass    @relation(fields: [classId], references: [id], onDelete: Cascade)
+  user          PortalUser? @relation(fields: [userId], references: [id])
+  @@index([classId, bookedForDate])
+  @@map("class_bookings")
+}
+
+model GymJoinRequest {
+  id          Int      @id @default(autoincrement())
+  gymId       Int
+  userId      Int
+  createdAt   DateTime @default(now())
+  status      String   @default("pending")
+  reviewedAt  DateTime?
+  reviewedById Int?
+  reviewNote  String   @default("")
+  gym         Gym         @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  user        PortalUser  @relation("Fighter", fields: [userId], references: [id])
+  reviewer    PortalUser? @relation("Reviewer", fields: [reviewedById], references: [id])
+  @@unique([gymId, userId])
+  @@map("gym_join_requests")
+}
+
+model GymEnquiry {
+  id           Int      @id @default(autoincrement())
+  createdAt    DateTime @default(now())
+  gymName      String
+  contactName  String
+  contactEmail String
+  phone        String   @default("")
+  city         String   @default("")
+  message      String   @default("")
+  status       String   @default("new")
+  invitedById  Int?
+  invitedAt    DateTime?
+  reviewedById Int?
+  reviewedAt   DateTime?
+  reviewNote   String   @default("")
+  invitedBy    PortalUser?         @relation("Invited", fields: [invitedById], references: [id])
+  reviewedBy   PortalUser?         @relation("Reviewed", fields: [reviewedById], references: [id])
+  tokens       GymOnboardingToken[]
+  @@map("gym_enquiries")
+}
+
+model GymOnboardingToken {
+  token     String   @id
+  enquiryId Int
+  createdAt DateTime @default(now())
+  expiresAt Int
+  usedAt    DateTime?
+  enquiry   GymEnquiry @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+  @@map("gym_onboarding_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Promotions & events
+// ---------------------------------------------------------------------------
+
+model Promotion {
+  id       Int    @id @default(autoincrement())
+  ownerId  Int
+  name     String
+  owner    PortalUser @relation(fields: [ownerId], references: [id])
+  events   Event[]
+  @@map("promotions")
+}
+
+model Event {
+  id                   Int      @id @default(autoincrement())
+  title                String
+  subtitle             String?
+  startsAt             String?
+  timezone             String?
+  venue                String?
+  city                 String?
+  description          String?
+  posterUrl            String?
+  status               String   @default("Upcoming")
+  promotionId          Int?
+  registrationOpen     Int      @default(0)
+  capacity             Int?
+  registrationClosesAt String?
+  categories           String   @default("[\"Featherweight\",\"Lightweight\"]")
+  promotion            Promotion?         @relation(fields: [promotionId], references: [id])
+  registrations        EventRegistration[]
+  bouts                Bout[]
+  @@map("events")
+}
+
+model EventRegistration {
+  id              Int      @id @default(autoincrement())
+  eventId         Int
+  athleteId       Int
+  addedById       Int
+  createdAt       DateTime @default(now())
+  status          String   @default("confirmed")
+  registrationRef String?  @unique
+  updatedAt       DateTime?
+  event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  athlete         Athlete  @relation(fields: [athleteId], references: [id])
+  @@unique([eventId, athleteId])
+  @@map("event_registrations")
+}
+
+model Bout {
+  id              Int    @id @default(autoincrement())
+  eventId         Int
+  redAthleteId    Int
+  blueAthleteId   Int
+  boutOrder       Int    @default(0)
+  cardSection     String @default("Main")
+  division        String?
+  winnerId        Int?
+  resultMethod    String?
+  resultRound     Int?
+  resultTime      String?
+  event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  red             Athlete  @relation("Red", fields: [redAthleteId], references: [id])
+  blue            Athlete  @relation("Blue", fields: [blueAthleteId], references: [id])
+  winner          Athlete? @relation("Winner", fields: [winnerId], references: [id])
+  result          BoutResult?
+  @@map("bouts")
+}
+
+model BoutResult {
+  boutId     Int      @id
+  outcome    String
+  updatedBy  Int
+  updatedAt  DateTime @default(now())
+  bout       Bout     @relation(fields: [boutId], references: [id], onDelete: Cascade)
+  @@map("bout_results")
+}
+
+model Ranking {
+  id         Int      @id @default(autoincrement())
+  athleteId  Int
+  division   String
+  position   Int
+  movement   Int      @default(0)
+  updatedAt  DateTime @default(now())
+  athlete    Athlete  @relation(fields: [athleteId], references: [id])
+  @@unique([athleteId, division])
+  @@map("rankings")
+}
+
+// ---------------------------------------------------------------------------
+// Outbound mail log (log-only until SMTP is wired)
+// ---------------------------------------------------------------------------
+
+model OutboundMail {
+  id         Int      @id @default(autoincrement())
+  createdAt  DateTime @default(now())
+  toAddress  String
+  subject    String
+  body       String
+  category   String
+  readAt     DateTime?
+  @@index([createdAt(sort: Desc)])
+  @@map("outbound_mail")
+}
+
+// ---------------------------------------------------------------------------
+// Site settings
+// ---------------------------------------------------------------------------
+
+model SiteSetting {
+  key   String @id
+  value String
+  @@map("site_settings")
+}

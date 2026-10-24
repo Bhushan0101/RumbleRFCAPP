@@ -6,7 +6,9 @@ import { preparePhoto } from "./photos.js";
 let step = 1;
 let draft = {
   role: "fighter",
-  division: "Featherweight",
+  division: "",
+  class_code: "",
+  martial_art: "",
   gym_code: "",
   coach_id: "",
 };
@@ -14,11 +16,22 @@ let selectedPhoto = null;
 let photoPreview = "";
 let chosenGym = null;
 
+const FIGHTER_CLASSES = [
+  { id: "J", name: "J-Class (Under 18)" },
+  { id: "N", name: "N-Class (up to 5 fights)" },
+  { id: "L", name: "L-Class (Learning class)" },
+  { id: "C", name: "C-Class (No shin pads)" },
+  { id: "B", name: "B-Class (Debut pro)" },
+  { id: "A", name: "A-Class (Seasoned pro)" },
+];
+
 export function clearRegistration() {
   step = 1;
   draft = {
     role: "fighter",
-    division: "Featherweight",
+    division: "",
+    class_code: "",
+    martial_art: "",
     gym_code: "",
     coach_id: "",
   };
@@ -65,10 +78,11 @@ export function registrationPage() {
 
 function registrationStep() {
   if (step === 1)
-    return `${field("Full name", "name", draft.name || "")}${field("Email address", "email", draft.email || "", "email")}${field("Create a password", "password", draft.password || "", "password")}<p class="field-hint">Use at least 10 characters. Your password stays private.</p>`;
+    return `<div class="two">${field("First name", "first_name", draft.first_name || "")}${field("Last name", "last_name", draft.last_name || "")}</div>${field("Email address", "email", draft.email || "", "email")}${field("Create a password", "password", draft.password || "", "password")}<p class="field-hint">Use at least 10 characters. Your password stays private.</p>`;
   if (step === 2)
-    return `<div class="photo-picker"><div id="registration-photo-preview">${photoPreview ? `<img class="avatar avatar-large" src="${esc(photoPreview)}" alt="Your selected photo">` : `<span class="avatar avatar-large avatar-placeholder">${icon("camera")}</span>`}</div><div><strong>Add your fighter photo</strong><p class="field-hint">Optional · JPG, PNG or WebP, up to 10 MB.</p><label class="button secondary file-button">Choose photo<input type="file" name="photo" id="registration-photo" accept="image/jpeg,image/png,image/webp"></label></div></div><fieldset class="category-field"><legend>Choose your category</legend><div class="category-options">${CATEGORIES.map((category) => `<label class="category-option"><input type="radio" name="division" value="${category}" ${draft.division === category ? "checked" : ""} required><span>${category}</span>${icon("check")}</label>`).join("")}</div></fieldset>${field("Country", "country", draft.country || "")}<details class="gym-connect" ${chosenGym ? "open" : ""}><summary>Connect my gym <span class="muted">Optional</span></summary><p class="field-hint">Have a gym? Ask them for their invitation code. You can also join independently.</p><div class="inline-input">${field("Gym invitation code", "gym_code", draft.gym_code || "", "text", false)}<button class="button secondary" type="button" data-action="registration-gym">Find gym</button></div><div id="registration-gym-result">${gymChoice()}</div></details>`;
-  return `<div class="review-profile">${photoPreview ? `<img src="${esc(photoPreview)}" class="avatar avatar-large" alt="Your selected photo">` : `<span class="avatar avatar-large avatar-placeholder">${esc((draft.name || "F")[0])}</span>`}<div><h2>${esc(draft.name)}</h2><p>${esc(draft.division)} · ${esc(draft.country)}</p></div></div><dl class="review-list"><div><dt>Email</dt><dd>${esc(draft.email)}</dd></div><div><dt>Gym</dt><dd>${esc(chosenGym?.gym.name || "Independent fighter")}</dd></div><div><dt>Coach</dt><dd>${esc(chosenGym?.coaches.find((c) => String(c.id) === String(draft.coach_id))?.name || "Not linked")}</dd></div></dl><div class="quiet-note">${icon("person")}<p>After creating your account, pay the €10 application fee. An administrator then reviews your application. Your profile is published and event entry unlocked only after approval. You can edit your details while waiting.</p></div>`;
+    return `<div class="photo-picker"><div id="registration-photo-preview">${photoPreview ? `<img class="avatar avatar-large" src="${esc(photoPreview)}" alt="Your selected photo">` : `<span class="avatar avatar-large avatar-placeholder">${icon("camera")}</span>`}</div><div><strong>Add your fighter photo</strong><p class="field-hint">Optional · JPG, PNG or WebP, up to 10 MB.</p><label class="button secondary file-button">Choose photo<input type="file" name="photo" id="registration-photo" accept="image/jpeg,image/png,image/webp"></label></div></div>${field("Martial art", "martial_art", draft.martial_art || "", "text")}<p class="field-hint">For example: K-1, Kickboxing, MMA, Muay Thai, Brazilian Jiu Jitsu.</p><fieldset class="category-field"><legend>Choose your class</legend><div class="category-options">${FIGHTER_CLASSES.map((c) => `<label class="category-option"><input type="radio" name="class_code" value="${c.id}" ${draft.class_code === c.id ? "checked" : ""} required><span>${esc(c.name)}</span>${icon("check")}</label>`).join("")}</div></fieldset>${field("Country", "country", draft.country || "Ireland")}<details class="gym-connect" ${chosenGym ? "open" : ""}><summary>Connect my gym <span class="muted">Optional</span></summary><p class="field-hint">Have a gym? Ask them for their invitation code. Fighters without a gym can register as independent and connect later.</p><div class="inline-input">${field("Gym invitation code", "gym_code", draft.gym_code || "", "text", false)}<button class="button secondary" type="button" data-action="registration-gym">Find gym</button></div><div id="registration-gym-result">${gymChoice()}</div></details>`;
+  const className = FIGHTER_CLASSES.find((c) => c.id === draft.class_code)?.name || "Not chosen";
+  return `<div class="review-profile">${photoPreview ? `<img src="${esc(photoPreview)}" class="avatar avatar-large" alt="Your selected photo">` : `<span class="avatar avatar-large avatar-placeholder">${esc((draft.first_name || "F")[0])}</span>`}<div><h2>${esc(((draft.first_name || "") + " " + (draft.last_name || "")).trim())}</h2><p>${esc(draft.martial_art || "Martial art not set")} · ${esc(draft.country || "")}</p></div></div><dl class="review-list"><div><dt>Email</dt><dd>${esc(draft.email)}</dd></div><div><dt>Class</dt><dd>${esc(className)}</dd></div><div><dt>Gym</dt><dd>${esc(chosenGym?.gym.name || "Independent fighter")}</dd></div><div><dt>Coach</dt><dd>${esc(chosenGym?.coaches.find((c) => String(c.id) === String(draft.coach_id))?.name || "Not linked")}</dd></div></dl><div class="quiet-note">${icon("person")}<p>After creating your account, an administrator reviews your application. Your profile is published and event entry unlocked only after approval. You can edit your details while waiting.</p></div>`;
 }
 function gymChoice() {
   return chosenGym
@@ -108,10 +122,12 @@ export async function submitRegistration(form) {
   }
   const payload = {
     role: "fighter",
-    name: draft.name,
+    first_name: draft.first_name,
+    last_name: draft.last_name,
     email: draft.email,
     password: draft.password,
-    division: draft.division,
+    class_code: draft.class_code,
+    martial_art: draft.martial_art,
     country: draft.country,
     gym_code: draft.gym_code,
     coach_id: draft.coach_id,

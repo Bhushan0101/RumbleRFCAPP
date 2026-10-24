@@ -19,14 +19,298 @@
 .left-nav .member-portal-mobile{display:none}
 @media(max-width:1050px){.left-nav .member-portal-mobile{display:inline-flex}}
 
-/* Current RFC direction: black and white, with saffron accents. */
-:root{--green:#171717;--gold:#ee8b26;--black:#171717;--muted:#777;--paper:#fafafa;--line:#e4e4e4}
-.utility{background:#171717;color:#ddd}
-.hero:after{background:linear-gradient(90deg,#111111ef 0%,#11111199 40%,#11111100 80%),linear-gradient(0deg,#11111190,transparent 60%)}
-.hero-image,.poster>img,.feature-photo,.media-card>img,.about-grid>img,.logo-window img,.flip-face img{filter:grayscale(1)}
-.dark-section,.join-banner,.join-banner:before{background-color:#171717}
-footer{background:#111;color:#eee}
-/* W.U.C.O identity replaces the archived RFC logo image. */
-.wuco-wordmark{display:block;font-family:Arial,sans-serif;font-size:27px;font-weight:900;letter-spacing:-1.5px;color:#171717;white-space:nowrap}
-.brand-plaque{display:grid;place-items:center;background:#171717;color:#fff;min-height:320px;font:900 clamp(38px,6vw,76px) Arial,sans-serif;letter-spacing:-3px;border-bottom:5px solid #ee8b26}
-@media(max-width:760px){.wuco-wordmark{font-size:23px}.footer-top .wordmark{font-size:38px}}
+/* W.U.C.O. identity: deep forest green with metallic gold. */
+:root{--green:#0b3d2e;--green-800:#0a2f23;--green-700:#124a3a;--green-500:#1f7a5c;--green-200:#2fae82;--gold:#d4af37;--gold-500:#d4af37;--gold-300:#e9c969;--black:#0a1510;--ink:#0a1510;--muted:#8a9690;--paper:#f4f1ea;--line:#dcd4c4}
+.utility{background:var(--green-800);color:#d4af37}
+.hero{background:var(--green-800)}
+.hero:after{background:linear-gradient(90deg,rgba(10,47,35,.92) 0%,rgba(10,47,35,.55) 45%,rgba(10,47,35,.1) 85%),linear-gradient(0deg,rgba(10,21,16,.78),transparent 60%)}
+.hero-image,.poster>img,.feature-photo,.media-card>img,.about-grid>img,.flip-face img{filter:none}
+.dark-section,.join-banner{background-color:var(--green-800);color:#fff}
+footer{background:var(--green-800);color:#eee}
+.event-strip{background:var(--green-800)}
+.poster{background:var(--green-700)}
+.flip-back{background:var(--green-700)}
+.portrait{border-bottom-color:var(--gold)}
+.flip-inner{border-bottom-color:var(--gold)}
+nav a.active:after,.feature-copy:before,.story-row b,.event-strip a,.rank-row span:last-child,.hero .eyebrow,.dark-section .eyebrow,.section-head a,.text-link,.champion,.notice{color:inherit}
+nav a.active:after,.feature-copy:before{background:var(--gold)}
+.primary{background:var(--gold);color:var(--ink);border-color:var(--gold)}
+.outline{color:inherit;border-color:#ffffff80}
+.ticket{background:var(--gold);color:var(--ink)}
+.tabs button.active{color:var(--green);box-shadow:0 2px var(--green)}
+.champion{border-bottom-color:var(--gold)}
+.notice{border-left-color:var(--gold);background:#faf4e4;color:#555}
+.wordmark{color:var(--gold)}
+
+/* Brand lockup: tree-of-life mark on each side of the W.U.C.O wordmark. */
+.brand-lockup{display:inline-flex;align-items:center;gap:14px;color:#fff}
+.brand-lockup .mark{width:46px;height:46px;object-fit:contain;flex:0 0 auto}
+.brand-lockup .text{display:flex;flex-direction:column;align-items:center;line-height:1}
+.brand-lockup .wuco-wordmark{display:block;font-family:'Barlow Condensed',Impact,sans-serif;font-weight:900;font-size:34px;letter-spacing:1px;color:#fff;white-space:nowrap}
+.brand-lockup .tagline{font-family:'Barlow Condensed',Impact,sans-serif;font-size:9px;letter-spacing:3px;color:var(--gold);margin-top:4px;text-align:center;white-space:nowrap}
+.brand-lockup .tagline em{font-style:normal;color:#fff}
+header{background:#0a2f23;color:#fff;box-shadow:0 5px 16px #0005}
+header nav a,header nav button{color:#fff}
+header .brand{color:#fff}
+.footer-top .wordmark{display:inline-flex;align-items:center;gap:10px;color:var(--gold);font-size:34px;font-style:normal;font-family:'Barlow Condensed',Impact,sans-serif;font-weight:900;letter-spacing:1px}
+.footer-top .wordmark .mark{width:38px;height:38px;object-fit:contain}
+
+/* Homepage dual-tile row: National Rankings + Upcoming Events (mock image #2). */
+.panel-row{display:grid;grid-template-columns:1fr 1fr;gap:22px;padding:0 7% 55px;max-width:1500px;margin:auto}
+.panel{background:var(--green-800);color:#fff;border:1px solid #ffffff14;padding:28px}
+.panel h2{font-size:22px;letter-spacing:1.5px;color:#fff;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center}
+.panel h2 a{font-size:10px;font-family:Barlow,sans-serif;letter-spacing:1.5px;color:var(--gold);border-bottom:1px solid var(--gold);padding-bottom:3px}
+.panel .weight-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.panel .weight-tabs button{background:transparent;color:#cfe3d8;border:1px solid #ffffff20;padding:7px 11px;font-size:10px;letter-spacing:1px;font-weight:700}
+.panel .weight-tabs button.active{background:var(--gold);color:var(--ink);border-color:var(--gold)}
+.panel .event-row{display:flex;gap:14px;align-items:center;padding:12px 0;border-top:1px solid #ffffff14}
+.panel .event-row:first-of-type{border-top:0}
+.panel .event-date{background:var(--green-700);color:#fff;width:52px;text-align:center;padding:8px 0;flex:0 0 auto}
+.panel .event-date b{display:block;font-family:'Barlow Condensed';font-size:22px}
+.panel .event-date small{font-size:9px;letter-spacing:1.5px;color:var(--gold)}
+.panel .event-meta{flex:1;min-width:0}
+.panel .event-meta strong{display:block;font-family:'Barlow Condensed';font-size:17px;text-transform:uppercase}
+.panel .event-meta p{margin:3px 0 0;font-size:11px;color:#b9c9c0}
+.panel .chip{display:inline-block;font-size:9px;letter-spacing:1px;padding:3px 8px;background:#ffffff14;color:#cfe3d8;margin-right:4px;margin-top:5px}
+
+/* Four action cards under the panels. */
+.action-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;padding:0 7% 55px;max-width:1500px;margin:auto}
+.action-card{background:#101e18;color:#fff;border:1px solid #ffffff14;padding:22px;text-align:left;display:flex;flex-direction:column;gap:12px;min-height:200px}
+.action-card .ico{width:36px;height:36px;background:var(--gold);color:var(--ink);display:grid;place-items:center;font-family:'Barlow Condensed';font-weight:900}
+.action-card h3{font-size:22px;color:#fff;margin:4px 0 0}
+.action-card p{font-size:12px;color:#9fb4aa;margin:0;flex:1}
+.action-card a{color:var(--gold);font-size:10px;letter-spacing:1.5px;font-weight:700;border-bottom:1px solid var(--gold);align-self:flex-start;padding-bottom:3px}
+
+/* Stats strip at bottom of homepage. */
+.wuco-stats{background:var(--green-800);color:#fff;padding:28px 7%;display:grid;grid-template-columns:repeat(5,1fr);gap:28px;max-width:1500px;margin:0 auto 0;border-top:1px solid #ffffff14}
+.wuco-stats .stat b{display:block;font-family:'Barlow Condensed';font-size:36px;color:var(--gold)}
+.wuco-stats .stat span{font-size:10px;letter-spacing:1.5px;color:#b9c9c0;display:block;margin-top:4px}
+
+@media(max-width:1050px){.action-cards{grid-template-columns:repeat(2,1fr)}.wuco-stats{grid-template-columns:repeat(2,1fr);gap:18px}.panel-row{grid-template-columns:1fr}}
+@media(max-width:760px){.brand-lockup .mark{width:36px;height:36px}.brand-lockup .wuco-wordmark{font-size:26px}.action-cards{grid-template-columns:1fr}.wuco-stats{grid-template-columns:1fr 1fr;padding:22px 6%}}
+
+/* Legacy helpers retained. */
+.brand-plaque{display:grid;place-items:center;background:var(--green-800);color:#fff;min-height:320px;font:900 clamp(38px,6vw,76px) 'Barlow Condensed',Impact,sans-serif;letter-spacing:-1px;border-bottom:5px solid var(--gold)}
+
+/* ============================================================
+   WUCO UI REDESIGN (UI-B..UI-G) — appended overrides.
+   Design tokens, header, hero copy, quick-services strip,
+   upgraded rankings panel, photo action cards, emerald stats.
+   ============================================================ */
+:root{
+  --bg:#080D0E;
+  --surface:#10191B;
+  --surface-2:#172224;
+  --border:#28383A;
+  --gold:#D8AE5C;
+  --gold-hi:#F2D28B;
+  --emerald:#006B4F;
+  --emerald-hi:#009468;
+  --text:#FFFFFF;
+  --muted-2:#A8B3B5;
+}
+body{background:var(--bg);color:var(--text)}
+
+/* ---- header ------------------------------------------------ */
+.site-header{position:sticky;top:0;z-index:50;background:#080D0Ef2;backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}
+.header-inner{max-width:1500px;margin:0 auto;padding:14px 36px;display:grid;grid-template-columns:auto 1fr auto;gap:28px;align-items:center}
+.site-header .brand{position:static;transform:none}
+.site-header .brand-lockup{color:#fff;gap:12px}
+.site-header .brand-lockup .mark{width:40px;height:40px}
+.site-header .brand-lockup .wuco-wordmark{font-size:24px;letter-spacing:1px}
+.site-header .brand-lockup .tagline{font-size:7.5px;letter-spacing:2.5px;margin-top:3px}
+.primary-nav>ul{list-style:none;margin:0;padding:0;display:flex;gap:22px;justify-content:center;align-items:center;flex-wrap:nowrap}
+.primary-nav a{color:#fff;font-family:'Barlow Condensed',Impact,sans-serif;font-weight:600;font-size:14px;letter-spacing:1px;text-transform:none;padding:10px 2px;display:inline-flex;align-items:center;gap:4px}
+.primary-nav a:hover{color:var(--gold)}
+.primary-nav .caret{font-size:9px;opacity:.7;transition:transform .2s}
+.has-dropdown{position:relative}
+.has-dropdown:hover>a .caret,.has-dropdown:focus-within>a .caret{transform:rotate(180deg)}
+.dropdown{position:absolute;top:calc(100% + 2px);left:-14px;min-width:220px;background:#0a1316;border:1px solid var(--border);padding:8px 0;display:none;box-shadow:0 20px 40px #0007}
+.has-dropdown:hover>.dropdown,.has-dropdown:focus-within>.dropdown{display:block}
+.dropdown a{display:block;padding:9px 18px;font-size:13px;letter-spacing:.5px;color:#dde8e3}
+.dropdown a:hover{background:#0f1e22;color:var(--gold)}
+.header-actions{display:flex;align-items:center;gap:10px}
+.icon-btn{width:38px;height:38px;display:grid;place-items:center;background:transparent;border:1px solid var(--border);color:#fff;border-radius:3px}
+.icon-btn:hover{border-color:var(--gold);color:var(--gold)}
+.member-login{display:inline-flex;align-items:center;gap:8px;background:var(--gold);color:#0a1510;padding:10px 18px;font:700 12px 'Barlow Condensed',Impact,sans-serif;letter-spacing:1.5px;border-radius:3px;text-transform:uppercase}
+.member-login:hover{background:var(--gold-hi)}
+.site-header .menu-toggle{display:none;background:transparent;color:#fff;font-size:26px;border:0;padding:4px 8px}
+
+/* ---- hero (override) --------------------------------------- */
+.hero{background:#0a1510}
+.hero:after{background:linear-gradient(90deg,rgba(8,13,14,.85) 0%,rgba(8,13,14,.55) 45%,rgba(8,13,14,.1) 85%),linear-gradient(0deg,rgba(8,13,14,.85),transparent 60%)}
+.hero h1{font-size:clamp(44px,6vw,88px);max-width:none;letter-spacing:1px;text-align:center;line-height:1.02}
+.hero h1 .wuco-big{display:block;font-size:clamp(90px,13vw,180px);color:#fff;letter-spacing:4px;margin-bottom:4px}
+.hero h1 .wuco-big-sub{display:block;font-size:clamp(10px,1.1vw,13px);letter-spacing:5px;color:#fff;margin-bottom:4px;font-weight:600;font-family:'Barlow Condensed'}
+.hero h1 .wuco-big-ireland{display:inline-block;padding:3px 24px;position:relative;font-size:clamp(12px,1.3vw,15px);letter-spacing:6px;color:var(--gold);margin-bottom:18px;font-weight:700;font-family:'Barlow Condensed'}
+.hero h1 .wuco-big-ireland::before,.hero h1 .wuco-big-ireland::after{content:"";position:absolute;top:50%;width:20px;height:1px;background:var(--gold)}
+.hero h1 .wuco-big-ireland::before{right:100%}
+.hero h1 .wuco-big-ireland::after{left:100%}
+.hero h1 .tagline-row{display:block;font-size:clamp(28px,4vw,60px);letter-spacing:1px;color:#fff}
+.hero h1 .tagline-row em{font-style:normal;color:var(--gold);display:block}
+.hero-content{text-align:center;max-width:1200px;padding-top:80px}
+.hero p.pill-row{font-size:11px;letter-spacing:3.5px;color:#dde8e3;margin:24px auto 32px;display:flex;flex-wrap:wrap;gap:14px;justify-content:center;align-items:center}
+.hero p.pill-row span{position:relative}
+.hero p.pill-row span+span::before{content:"|";position:absolute;left:-10px;color:#4a5c54}
+.hero .actions{justify-content:center}
+.hero .btn-join{background:var(--emerald);color:#fff;border:1px solid var(--emerald);padding:16px 32px;font:700 12px 'Barlow Condensed',Impact,sans-serif;letter-spacing:2px;display:inline-flex;align-items:center;gap:12px}
+.hero .btn-join:hover{background:var(--emerald-hi);border-color:var(--emerald-hi)}
+.hero .btn-view{background:transparent;color:#fff;border:1px solid var(--gold);padding:16px 32px;font:700 12px 'Barlow Condensed',Impact,sans-serif;letter-spacing:2px}
+.hero .btn-view:hover{background:var(--gold);color:#0a1510}
+
+/* ---- quick-services strip (UI-D) --------------------------- */
+.quick-services{background:var(--bg);border-bottom:1px solid var(--border);padding:28px 7%}
+.quick-services-grid{max-width:1500px;margin:0 auto;display:grid;grid-template-columns:repeat(6,1fr)}
+.quick-service{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:18px 12px;color:#fff;border-right:1px solid var(--border);text-align:center;transition:background .2s}
+.quick-service:last-child{border-right:0}
+.quick-service:hover{background:#0f1e22}
+.quick-service svg{width:28px;height:28px;color:var(--gold);stroke:var(--gold);fill:none;stroke-width:1.5}
+.quick-service span{font:700 11px 'Barlow Condensed',Impact,sans-serif;letter-spacing:1.5px;line-height:1.2}
+
+/* ---- upgraded rankings panel (UI-E) ------------------------ */
+.panel-row{background:var(--bg);padding:36px 7% 48px}
+.panel-row .panel{background:var(--surface);border:1px solid var(--border);padding:0;position:relative;overflow:hidden}
+.panel-row .panel>h2{padding:22px 24px;margin:0;border-bottom:1px solid var(--border);background:#0f1a1c}
+.rankings-panel-body{display:grid;grid-template-columns:150px 1fr;min-height:360px}
+.rankings-weight-col{background:#0b1517;padding:14px 10px;display:flex;flex-direction:column;gap:6px}
+.rankings-weight-col button{background:transparent;color:#cfe3d8;border:0;padding:9px 10px;text-align:center;font:700 11px 'Barlow Condensed',Impact,sans-serif;letter-spacing:1px}
+.rankings-weight-col button:hover{color:var(--gold)}
+.rankings-weight-col button.active{background:var(--gold);color:#0a1510}
+.rankings-category-tabs{display:flex;gap:0;padding:14px 20px 0;background:var(--surface);border-bottom:1px solid var(--border)}
+.rankings-category-tabs button{background:transparent;color:#cfe3d8;border:1px solid var(--border);padding:8px 20px;font:700 10px 'Barlow Condensed',Impact,sans-serif;letter-spacing:1.5px;margin-right:6px;margin-bottom:-1px}
+.rankings-category-tabs button.active{background:var(--gold);color:#0a1510;border-color:var(--gold)}
+.rankings-stage{position:relative;padding:30px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;min-height:300px;background:linear-gradient(135deg,rgba(0,107,79,.25),rgba(10,21,16,.4)),url('assets/arena.webp') center/cover}
+.rankings-stage::after{content:"";position:absolute;inset:0;background:linear-gradient(0deg,rgba(8,13,14,.9) 0%,rgba(8,13,14,.4) 50%,rgba(8,13,14,.6) 100%)}
+.rankings-stage>*{position:relative;z-index:1}
+.rankings-stage .label{color:#fff;font:900 clamp(22px,3vw,32px) 'Barlow Condensed',Impact,sans-serif;letter-spacing:2px;text-align:center;line-height:1}
+.rankings-stage .label strong{display:block;font-size:clamp(32px,4vw,48px);color:#fff;letter-spacing:3px;margin-top:4px}
+.rankings-stage .view-btn{margin-top:18px;background:transparent;color:#fff;border:1px solid var(--gold);padding:12px 24px;font:700 11px 'Barlow Condensed',Impact,sans-serif;letter-spacing:2px}
+.rankings-stage .view-btn:hover{background:var(--gold);color:#0a1510}
+
+/* ---- action cards (UI-F) ----------------------------------- */
+.action-cards{background:var(--bg);padding:12px 7% 56px}
+.action-cards{grid-template-columns:repeat(4,1fr)}
+.action-cards .action-card{background:var(--surface);border:1px solid var(--border);padding:0;overflow:hidden;display:flex;flex-direction:column;min-height:0}
+.action-cards .action-card .photo{height:170px;background:#07251b center/cover no-repeat;position:relative}
+.action-cards .action-card .photo::after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,.1) 0%,rgba(8,13,14,.85) 100%)}
+.action-cards .action-card:nth-child(1) .photo{background-image:linear-gradient(0deg,rgba(0,0,0,.5),transparent),url('assets/arena.webp');background-position:60% 30%}
+.action-cards .action-card:nth-child(2) .photo{background-image:linear-gradient(0deg,rgba(0,0,0,.5),transparent),url('assets/arena.webp');background-position:30% 60%}
+.action-cards .action-card:nth-child(3) .photo{background-image:linear-gradient(0deg,rgba(0,0,0,.5),transparent),url('assets/arena.webp');background-position:85% 40%;filter:hue-rotate(-10deg)}
+.action-cards .action-card:nth-child(4) .photo{background-image:linear-gradient(0deg,rgba(0,0,0,.5),transparent),url('assets/arena.webp');background-position:15% 70%;filter:saturate(.8)}
+.action-cards .action-card .ico{display:none}
+.action-cards .action-card .body{padding:18px 20px 20px;display:flex;flex-direction:column;gap:10px;flex:1}
+.action-cards .action-card h3{color:#fff;font-size:20px;letter-spacing:1px;margin:0}
+.action-cards .action-card p{color:var(--muted-2);font-size:12px;line-height:1.5;margin:0;flex:1}
+.action-cards .action-card a{background:var(--gold);color:#0a1510;border:0;padding:11px 16px;font:700 11px 'Barlow Condensed',Impact,sans-serif;letter-spacing:1.5px;text-align:center;display:flex;align-items:center;justify-content:center;gap:10px;align-self:stretch}
+.action-cards .action-card a:hover{background:var(--gold-hi)}
+
+/* ---- emerald stats bar (UI-G) ------------------------------ */
+.wuco-stats{background:var(--emerald);border-top:0;padding:24px 7%;grid-template-columns:repeat(6,1fr);gap:0;color:#fff}
+.wuco-stats .stat{position:relative;display:flex;align-items:center;gap:14px;padding:8px 18px;border-right:1px solid rgba(255,255,255,.15)}
+.wuco-stats .stat:last-child{border-right:0}
+.wuco-stats .stat .ico{width:32px;height:32px;flex:0 0 32px;color:var(--gold);stroke:var(--gold);fill:none;stroke-width:1.5}
+.wuco-stats .stat .ico svg{width:100%;height:100%}
+.wuco-stats .stat b{display:block;font-family:'Barlow Condensed',Impact,sans-serif;font-size:28px;color:#fff;line-height:1}
+.wuco-stats .stat span{display:block;font-size:9.5px;letter-spacing:1.5px;color:#e8f3ef;margin-top:3px;line-height:1.3}
+
+/* ---- panels row (UI already in place; adjust tokens) ------- */
+.panel-row{grid-template-columns:1fr 1fr}
+.panel-row .panel h2{color:#fff}
+.panel-row .panel h2 a{color:var(--gold);border-color:var(--gold)}
+.panel-row .panel .event-row{padding:14px 24px}
+.panel-row .panel .event-row .event-date{background:var(--emerald)}
+.panel-row .panel .event-row .event-date small{color:#fff}
+.panel-row .panel .event-row .event-date b{color:#fff}
+.panel-row .panel .event-row .event-meta p{color:var(--muted-2)}
+.panel-row .panel .event-row .chip{background:#0f1e22;color:#cfe3d8;border:1px solid var(--border)}
+
+/* ---- footer tune-up --------------------------------------- */
+footer{background:#060a0b;border-top:1px solid var(--border)}
+.footer-top .wordmark{color:#fff}
+
+/* ---- responsive -------------------------------------------- */
+@media(max-width:1200px){
+  .header-inner{grid-template-columns:auto auto auto;gap:16px}
+  .primary-nav>ul{gap:16px}
+  .primary-nav a{font-size:13px}
+  .quick-services-grid{grid-template-columns:repeat(3,1fr)}
+  .quick-service:nth-child(3){border-right:0}
+  .action-cards{grid-template-columns:repeat(2,1fr)}
+  .wuco-stats{grid-template-columns:repeat(3,1fr);gap:12px 0}
+  .wuco-stats .stat:nth-child(3){border-right:0}
+}
+@media(max-width:900px){
+  .header-inner{grid-template-columns:1fr auto;gap:12px;padding:12px 20px}
+  .site-header .menu-toggle{display:inline-flex;order:3}
+  .primary-nav{order:4;grid-column:1/-1;display:none;background:#0a1316;border-top:1px solid var(--border);margin:12px -20px 0;padding:12px 20px}
+  .primary-nav.open{display:block}
+  .primary-nav>ul{flex-direction:column;align-items:stretch;gap:0}
+  .primary-nav>ul>li{border-bottom:1px solid var(--border)}
+  .primary-nav>ul>li>a{padding:14px 2px}
+  .primary-nav .dropdown{position:static;display:none;border:0;padding:0 0 8px 16px;background:transparent;box-shadow:none;min-width:0}
+  .primary-nav .has-dropdown.open>.dropdown{display:block}
+  .site-header .brand-lockup .wuco-wordmark{font-size:20px}
+  .site-header .brand-lockup .tagline{display:none}
+  .site-header .brand-lockup .mark{width:34px;height:34px}
+  .member-login span{display:none}
+  .panel-row{grid-template-columns:1fr}
+  .rankings-panel-body{grid-template-columns:110px 1fr}
+}
+@media(max-width:600px){
+  .quick-services-grid{grid-template-columns:repeat(2,1fr)}
+  .quick-service{border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+  .quick-service:nth-child(2n){border-right:0}
+  .quick-service:nth-last-child(-n+2){border-bottom:0}
+  .action-cards{grid-template-columns:1fr}
+  .wuco-stats{grid-template-columns:repeat(2,1fr)}
+  .wuco-stats .stat:nth-child(2){border-right:0}
+  .wuco-stats .stat:nth-child(3),.wuco-stats .stat:nth-child(5){border-right:1px solid rgba(255,255,255,.15)}
+  .hero h1 .wuco-big{font-size:72px}
+  .hero p.pill-row{font-size:9.5px;letter-spacing:2px;gap:10px}
+}
+
+/* UI-I: condensed 5-item nav — tighten header, drop tagline above 1200px, give brand min-width protection. */
+.header-inner{padding:12px 28px;gap:20px;grid-template-columns:minmax(200px,auto) 1fr auto}
+.site-header .brand{min-width:0}
+.site-header .brand-lockup{gap:10px}
+.site-header .brand-lockup .mark{width:36px;height:36px;flex:0 0 36px}
+.site-header .brand-lockup .wuco-wordmark{font-size:22px}
+.site-header .brand-lockup .tagline{font-size:7px;letter-spacing:2px}
+.primary-nav>ul{gap:28px}
+.primary-nav a{font-size:14px;letter-spacing:.5px;padding:12px 2px}
+.dropdown{min-width:200px}
+.member-login{padding:10px 16px;font-size:11px;letter-spacing:1.2px;white-space:nowrap}
+@media(max-width:1200px){
+  .site-header .brand-lockup .tagline{display:none}
+  .primary-nav>ul{gap:20px}
+}
+@media(max-width:1050px){
+  .header-inner{padding:12px 20px}
+  .primary-nav>ul{gap:16px}
+  .primary-nav a{font-size:13px}
+}
+
+/* UI-J: fix header alignment and ensure the brand (logo + wordmark) is visible. */
+.site-header{width:100%}
+.header-inner{max-width:1400px;margin:0 auto;padding:14px 32px;display:flex;align-items:center;gap:28px}
+.site-header .brand{position:static;transform:none;flex:0 0 auto;margin-right:auto}
+.site-header .brand-lockup{display:inline-flex;align-items:center;gap:10px;color:#fff}
+.site-header .brand-lockup .mark{width:40px;height:40px;flex:0 0 40px;object-fit:contain}
+.site-header .brand-lockup .text{display:flex;flex-direction:column;align-items:flex-start;line-height:1}
+.site-header .brand-lockup .wuco-wordmark{font-size:24px;letter-spacing:1px;color:#fff}
+.site-header .brand-lockup .tagline{display:block;font-size:7px;letter-spacing:2px;color:var(--gold);margin-top:4px;white-space:nowrap}
+.primary-nav{flex:1;display:flex;justify-content:center}
+.primary-nav>ul{display:flex;gap:28px;list-style:none;margin:0;padding:0;align-items:center}
+.header-actions{flex:0 0 auto;display:flex;align-items:center;gap:12px}
+@media(max-width:1200px){
+  .header-inner{padding:12px 24px;gap:18px}
+  .primary-nav>ul{gap:22px}
+  .primary-nav a{font-size:13px}
+  .site-header .brand-lockup .tagline{display:none}
+}
+@media(max-width:900px){
+  .header-inner{padding:12px 18px;flex-wrap:wrap;gap:12px}
+  .primary-nav{order:5;flex:1 0 100%;justify-content:flex-start;display:none}
+  .primary-nav.open{display:flex}
+  .site-header .menu-toggle{display:inline-flex;order:3}
+}

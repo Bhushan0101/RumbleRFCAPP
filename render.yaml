@@ -1,19 +1,44 @@
-# Stakeholder TEST DEMO. Public dummy credentials; never use this mode for real member data.
-# Free-tier storage is ephemeral: edits and registrations reset after restart/redeploy.
+# Render.com Infrastructure-as-Code for W.U.C.O Ireland
+# Deploy: push to GitHub, click "New Blueprint Instance", point at this file.
+#
+# One Web Service + one 1 GB persistent disk mounted at /opt/render/project/src/app-next/prisma
+# so the SQLite DB survives redeploys.
+#
+# Env vars that MUST be set in the Render dashboard (never commit secrets):
+#   AUTH_SECRET            — openssl rand -base64 32
+#   AUTH_URL               — https://your-render-service.onrender.com
+#   NEXT_PUBLIC_SITE_URL   — https://your-render-service.onrender.com (or custom domain)
+#   WUCO_ADMIN_INBOX       — ops@wuco.ie
+
 services:
   - type: web
-    name: WUCO-Portal
-    runtime: python
-    plan: free
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn main:app --bind 0.0.0.0:$PORT --workers 1 --threads 4 --timeout 60"
-    healthCheckPath: /api/health
+    name: wuco-ireland
+    runtime: node
+    plan: starter          # $7/mo — no cold starts. "free" plan sleeps after 15 min.
+    region: frankfurt       # closest to Ireland
+    rootDir: app-next
+    buildCommand: "npm ci && npx prisma migrate deploy && npm run build"
+    startCommand: "node .next/standalone/server.js"
+    healthCheckPath: /
+    autoDeploy: true
     envVars:
-      - key: PYTHON_VERSION
-        value: "3.12.7"
-      - key: WUCO_DEMO_MODE
-        value: "1"
-      - key: RFC_DB_PATH
-        value: /tmp/rfc-demo.sqlite3
-      - key: WUCO_PAYMENT_MODE
-        value: demo
+      - key: NODE_VERSION
+        value: "22.11.0"
+      - key: DATABASE_URL
+        value: "file:/opt/render/project/src/app-next/prisma/dev.db"
+      - key: AUTH_SECRET
+        generateValue: true     # Render auto-generates on first deploy
+      - key: AUTH_URL
+        sync: false             # must set manually to your service URL
+      - key: NEXT_PUBLIC_SITE_URL
+        sync: false             # must set manually
+      - key: WUCO_ADMIN_INBOX
+        value: ops@wuco.ie
+      - key: HOSTNAME
+        value: "0.0.0.0"
+      - key: PORT
+        value: "10000"
+    disk:
+      name: wuco-sqlite
+      mountPath: /opt/render/project/src/app-next/prisma
+      sizeGB: 1

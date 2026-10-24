@@ -52,7 +52,20 @@ def linked_id(db, data, key, table):
     one(db, f'SELECT id FROM {table} WHERE id=?', (value,))
     return value
 
+CLASS_CODES = ('J','N','L','C','B','A')
+
+def fighter_class(value):
+    if value in (None, ''):
+        return None
+    if value not in CLASS_CODES:
+        raise Error('Choose a fighter class: J, N, L, C, B or A')
+    return value
+
 def create_user(db, data, allow_admin=False):
+    first = (data.get('first_name') or '').strip()
+    last = (data.get('last_name') or '').strip()
+    if first or last:
+        data = {**data, 'name': (first + ' ' + last).strip()}
     name, email = text(data, 'name'), text(data, 'email', 254).lower()
     if email in {r+'@demo.rfc.test' for r in ('admin','fighter','promoter','gym','coach')}:email=email.replace('@demo.rfc.test','@demo.wuco.test')
     role = data.get('role')
@@ -86,12 +99,18 @@ def create_user(db, data, allow_admin=False):
         db.execute('INSERT INTO promotions(owner_id,name) VALUES(?,?)', (uid,text(data,'organization')))
     elif role == 'fighter':
         aid = create_athlete(db, data)
-        db.execute('INSERT INTO fighter_profiles(athlete_id,user_id,gym_id,coach_id,approval_status,legacy_member,created_by) VALUES(?,?,?,?,?,?,?)', (aid,uid,gym,coach,'awaiting_payment',0,uid))
+        db.execute('INSERT INTO fighter_profiles(athlete_id,user_id,gym_id,coach_id,approval_status,legacy_member,created_by) VALUES(?,?,?,?,?,?,?)', (aid,uid,gym,coach,'pending_approval',0,uid))
     return uid
 
 def create_athlete(db, data):
-    division, country = category(data.get('division')), text(data,'country',60)
-    return db.execute('INSERT INTO athletes(name,division,country,wins,losses,draws,is_sample) VALUES(?,?,?,0,0,0,1)', (text(data,'name',120),division,country)).lastrowid
+    # Division is optional at registration — admin assigns a weight division on approval
+    # if the fighter does not pick one. Falls back to the first supported category.
+    raw_div = data.get('division')
+    division = category(raw_div) if raw_div else CATEGORIES[0]
+    country = text(data,'country',60,required=False) or ''
+    class_code = fighter_class(data.get('class_code'))
+    martial_art = text(data,'martial_art',120,required=False) or ''
+    return db.execute('INSERT INTO athletes(name,division,country,wins,losses,draws,is_sample,class_code,martial_art) VALUES(?,?,?,0,0,0,1,?,?)', (text(data,'name',120),division,country,class_code,martial_art)).lastrowid
 
 def snapshot(db, user):
     # Only the signed-in user (and app admin) sees account email; directories are public profiles.
@@ -99,9 +118,10 @@ def snapshot(db, user):
         'gyms': rows(db,'SELECT id,name,city FROM gyms'),
         'coaches': rows(db,'SELECT id,name,gym_id FROM coaches'),
         'promotions': rows(db,'SELECT id,name FROM promotions'),
-        'fighters': rows(db,'''SELECT a.id,a.name,a.nickname,a.biography,a.portrait_url,a.division,a.country,a.wins,a.losses,a.draws,
-            f.gym_id,f.coach_id,coalesce(f.approval_status,'approved') AS approval_status,CASE WHEN f.user_id IS NULL THEN 0 ELSE 1 END AS has_account
-            FROM athletes a LEFT JOIN fighter_profiles f ON f.athlete_id=a.id ORDER BY a.name'''),
+        'fighters': rows(db,'''SELECT a.id,a.name,a.nickname,a.biography,a.portrait_url,a.division,a.country,a.wins,a.losses,a.draws,a.class_code,a.martial_art,
+            f.gym_id,f.coach_id,coalesce(f.approval_status,'approved') AS approval_status,CASE WHEN f.user_id IS NULL THEN 0 ELSE 1 END AS has_account,
+            p.fighter_no
+            FROM athletes a LEFT JOIN fighter_profiles f ON f.athlete_id=a.id LEFT JOIN fighter_passports p ON p.athlete_id=a.id ORDER BY a.name'''),
         'events': rows(db,'''SELECT e.*,p.name AS promotion_name,
             (SELECT count(*) FROM event_registrations r WHERE r.event_id=e.id AND r.status='confirmed') AS registered_count
             FROM events e LEFT JOIN promotions p ON p.id=e.promotion_id ORDER BY e.id DESC'''),
@@ -130,22 +150,18 @@ def snapshot(db, user):
         gym_id=own.get('id') if user['role']=='gym' else own.get('gym_id')
         result['gyms']=[g for g in result['gyms'] if g['id']==gym_id]
         result['coaches']=[c for c in result['coaches'] if (gym_id and c['gym_id']==gym_id) or (user['role']=='coach' and c['id']==own.get('id'))]
-    from portal_features.payments import config as payment_config
-    result['payment_settings']=payment_config()
-    result['brand_name']='W.U.C.O'
     from portal_features.events import availability
     for event in result['events']:event['availability']=availability(db,event)
     if user:
         result['my_entries']=rows(db,'''SELECT r.* FROM event_registrations r JOIN fighter_profiles f ON f.athlete_id=r.athlete_id WHERE f.user_id=? OR f.created_by=? ORDER BY r.id DESC''',(user['id'],user['id']))
-        result['my_payments']=rows(db,'''SELECT p.id,p.athlete_id,p.status,p.provider,p.amount_cents,p.currency,p.is_test,p.receipt_number,p.paid_at,p.refunded_cents,p.fighter_name
-            FROM payments p JOIN fighter_profiles f ON f.athlete_id=p.athlete_id
-            WHERE p.payer_id=? OR f.user_id=? OR f.created_by=? ORDER BY p.id DESC''',(user['id'],user['id'],user['id']))
         result['my_applications']=rows(db,'''SELECT f.*,a.name,a.division FROM fighter_profiles f JOIN athletes a ON a.id=f.athlete_id
             WHERE f.user_id=? OR f.created_by=?''',(user['id'],user['id']))
         if user['role']=='admin':
             from portal_features.applications import overview
             result['applications']=overview(db,user)
             result['pending_approval_count']=sum(a['approval_status']=='pending_approval' for a in result['applications'])
+            result['gym_enquiries']=rows(db,'SELECT * FROM gym_enquiries ORDER BY created_at DESC')
+            result['notifications']=rows(db,'SELECT * FROM outbound_mail ORDER BY created_at DESC LIMIT 200')
     visible_ids={f['id'] for f in result['fighters'] if f['approval_status']=='approved'}
     visible_ids.update(r['athlete_id'] for r in result['registrations'])
     if user:
@@ -169,12 +185,45 @@ def dispatch(db, user, method, path, data):
     if parts[0]=='fighters':
         from portal_features.applications import dispatch as applications_dispatch
         return applications_dispatch(db,user,method,path,data)
-    if parts[0] in ('payments','applications'):
-        from portal_features.payments import dispatch as payment_dispatch
-        return payment_dispatch(db,user,method,path,data)
-    if method=='POST' and path=='finance/report':
-        from portal_features.finance import report
-        return report(db,user,data)
+    if method=='GET' and parts[0]=='gyms' and len(parts)==2:
+        from portal_features.gym_public import public_page
+        page = public_page(db, parts[1])
+        if page is None:
+            raise Error('Gym not found', 404)
+        return page
+    if method=='POST' and parts[0]=='classes' and len(parts)==3 and parts[2]=='book':
+        from portal_features.gym_public import book_class
+        return book_class(db, user, number(parts[1]), data)
+    if method=='POST' and path=='gym_join/request':
+        from portal_features.gym_public import request_join
+        return request_join(db, user, data)
+    if method=='GET' and path=='gym_join/requests':
+        from portal_features.gym_public import list_join_requests
+        return list_join_requests(db, user)
+    if method=='PUT' and parts[0]=='gym_join' and len(parts)==2:
+        from portal_features.gym_public import review_join
+        return review_join(db, user, number(parts[1]), data)
+    if method=='POST' and path=='gym_enquiries':
+        from portal_features.gym_onboarding import submit_enquiry
+        return submit_enquiry(db,data)
+    if method=='GET' and path=='gym_enquiries':
+        from portal_features.gym_onboarding import list_enquiries
+        return list_enquiries(db,user)
+    if method=='POST' and parts[0]=='gym_enquiries' and len(parts)==3 and parts[2]=='invite':
+        from portal_features.gym_onboarding import invite
+        return invite(db,user,number(parts[1]))
+    if method=='POST' and parts[0]=='gym_enquiries' and len(parts)==3 and parts[2]=='approve':
+        from portal_features.gym_onboarding import approve_gym
+        return approve_gym(db,user,number(parts[1]),data)
+    if method=='POST' and parts[0]=='gym_enquiries' and len(parts)==3 and parts[2]=='reject':
+        from portal_features.gym_onboarding import reject_enquiry
+        return reject_enquiry(db,user,number(parts[1]),data)
+    if method=='POST' and path=='gym_onboarding/lookup':
+        from portal_features.gym_onboarding import read_token
+        return read_token(db,data.get('token',''))
+    if method=='POST' and path=='gym_onboarding/submit':
+        from portal_features.gym_onboarding import submit_onboarding
+        return submit_onboarding(db,data)
     if method=='POST' and path=='gym/lookup':
         from portal_features.fighters import lookup_gym
         return lookup_gym(db,data)
@@ -218,7 +267,7 @@ def handle(db_path, method, path, data=None, cookie='', headers=None, host='loca
             db.execute('PRAGMA foreign_keys=ON')
             if method!='GET': db.execute('BEGIN IMMEDIATE')
             cookies=SimpleCookie(cookie)
-            token=cookies['rfc_member'].value if 'rfc_member' in cookies else ''
+            token=cookies['wuco_member'].value if 'wuco_member' in cookies else ''
             digest=hashlib.sha256(token.encode()).hexdigest()
             user_row=db.execute('SELECT u.id,u.name,u.email,u.role FROM portal_sessions s JOIN portal_users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?',(digest,int(time.time()))).fetchone()
             user=dict(user_row) if user_row else None
@@ -236,20 +285,12 @@ def handle(db_path, method, path, data=None, cookie='', headers=None, host='loca
                 token=secrets.token_urlsafe(32)
                 db.execute('DELETE FROM portal_sessions WHERE expires_at<=?',(int(time.time()),))
                 db.execute('INSERT INTO portal_sessions VALUES(?,?,?)',(hashlib.sha256(token.encode()).hexdigest(),account['id'],int(time.time())+28800))
-                extra['Set-Cookie']=f'rfc_member={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800'+ ('; Secure' if headers.get('X-Forwarded-Proto')=='https' else '')
+                extra['Set-Cookie']=f'wuco_member={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800'+ ('; Secure' if headers.get('X-Forwarded-Proto')=='https' else '')
                 result={'ok':True}
             elif method=='POST' and path=='logout':
                 db.execute('DELETE FROM portal_sessions WHERE token_hash=?',(digest,))
-                extra['Set-Cookie']='rfc_member=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'
+                extra['Set-Cookie']='wuco_member=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'
                 result={'ok':True}
-            elif method=='GET' and re.fullmatch(r'payments/[0-9]+/receipt',path):
-                from portal_features.finance import receipt
-                result,reference=receipt(db,user,int(path.split('/')[1]))
-                extra={'Content-Type':'application/pdf','Content-Disposition':f'attachment; filename={reference}.pdf'}
-            elif method=='POST' and path=='finance/export':
-                from portal_features.finance import export_csv
-                result=export_csv(db,user,data)
-                extra={'Content-Type':'text/csv; charset=utf-8','Content-Disposition':'attachment; filename=WUCO-payments.csv'}
             elif method=='GET' and path=='rankings/template':
                 from ranking_excel import template
                 result=template(db,user)

@@ -1,0 +1,95 @@
+@import "tailwindcss";
+
+/* ============================================================
+   W.U.C.O Ireland — design tokens.
+   Dark-mode default. Deep forest green + metallic gold.
+   ============================================================ */
+
+@theme {
+  /* Brand palette */
+  --color-bg: #080D0E;
+  --color-surface: #10191B;
+  --color-surface-2: #172224;
+  --color-surface-3: #0f1a1c;
+  --color-border: #28383A;
+  --color-gold: #D8AE5C;
+  --color-gold-hi: #F2D28B;
+  --color-gold-ink: #B48A3F;
+  --color-emerald: #006B4F;
+  --color-emerald-hi: #009468;
+  --color-emerald-ink: #004F3B;
+  --color-text: #FFFFFF;
+  --color-muted: #A8B3B5;
+  --color-muted-2: #7a8588;
+
+  /* Typography */
+  --font-sans: var(--font-barlow), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-barlow-condensed), Impact, ui-sans-serif, sans-serif;
+
+  /* Breakpoints (kept close to current site) */
+  --breakpoint-xs: 430px;
+
+  /* Container width */
+  --container-wide: 1500px;
+  --container-narrow: 1200px;
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+}
+
+html, body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  min-height: 100vh;
+}
+
+/* Headings use the display font. */
+h1, h2, h3, h4, h5, h6,
+.font-display {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  font-weight: 800;
+}
+
+/* Focus ring (keyboard a11y). */
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+::selection {
+  background: var(--color-gold);
+  color: var(--color-bg);
+}
+
+/* Softer rounded corners for interactive + container elements by default. */
+button, [role="button"], .btn,
+input:not([type="radio"]):not([type="checkbox"]),
+textarea, select {
+  border-radius: 10px;
+}
+
+/* Cards and surfaces inherit rounded-xl where used; add a utility class. */
+.card {
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+/* Reduced-motion respect. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -9,7 +9,22 @@ __pycache__/
 *.backup
 .DS_Store
 .claude/
+.idea/
 admin_config.json
+logs/
 public/assets/uploads/
 # Generated demo fighter images ARE committed so the deployed site renders.
 # (Re-generate locally with: python scripts/seed_demo_fighters.py)
+
+# ---- Next.js app ----
+app-next/.next/
+app-next/out/
+app-next/node_modules/
+app-next/.turbo/
+app-next/next-env.d.ts
+app-next/prisma/dev.db
+app-next/prisma/dev.db-journal
+app-next/.env
+app-next/.env.local
+app-next/.env.*.local
+app-next/logs/

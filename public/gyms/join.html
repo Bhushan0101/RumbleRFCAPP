@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0a2f23">
+<title>Register your gym | W.U.C.O</title>
+<link rel="stylesheet" href="../style.css">
+<style>
+body{background:#f4f1ea;color:#0a1510}
+.enquiry-shell{max-width:720px;margin:0 auto;padding:48px 24px 80px}
+.enquiry-head{text-align:center;margin-bottom:36px}
+.enquiry-head img{width:72px;height:72px;object-fit:contain;display:block;margin:0 auto 14px}
+.enquiry-head h1{font-family:'Barlow Condensed',Impact,sans-serif;font-size:46px;letter-spacing:2px;color:#0a2f23;margin:0 0 10px}
+.enquiry-head p{color:#4a5c54;max-width:520px;margin:0 auto;font-size:14px;line-height:1.6}
+.enquiry-card{background:#fff;border:1px solid #dcd4c4;border-radius:4px;padding:36px;box-shadow:0 24px 60px #0001}
+.enquiry-card label{display:block;font-family:'Barlow Condensed',Impact,sans-serif;letter-spacing:1.5px;font-size:12px;color:#0a2f23;margin:14px 0 6px}
+.enquiry-card input,.enquiry-card textarea{width:100%;padding:14px 16px;border:1px solid #cfc6b4;background:#fff;font:14px Barlow,sans-serif}
+.enquiry-card textarea{min-height:120px;resize:vertical}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.enquiry-card button{margin-top:24px;background:#0a2f23;color:#d4af37;padding:16px 28px;font:700 12px 'Barlow Condensed',Impact,sans-serif;letter-spacing:2px;border:0;cursor:pointer}
+.enquiry-card button:disabled{opacity:.5;cursor:wait}
+.notice{padding:14px 18px;background:#faf4e4;border-left:3px solid #d4af37;font-size:13px;margin-bottom:18px}
+.flash{display:none;padding:16px 20px;background:#1a5a44;color:#fff;border-radius:4px;margin-bottom:18px}
+.flash.show{display:block}
+.flash.error{background:#8d2626}
+@media(max-width:600px){.two{grid-template-columns:1fr}.enquiry-card{padding:24px}}
+</style>
+</head>
+<body>
+<div class="enquiry-shell">
+  <div class="enquiry-head">
+    <img src="../assets/logos/wuco-mark.png" alt="">
+    <h1>REGISTER YOUR GYM</h1>
+    <p>Tell us about your club and a W.U.C.O admin will be in touch with the full onboarding form.
+       Nothing is published yet — this is a short enquiry to get started.</p>
+  </div>
+  <section class="enquiry-card">
+    <div class="notice">Already have an invitation link? Open the link your W.U.C.O admin sent — it goes straight to the full onboarding form.</div>
+    <div id="flash" class="flash"></div>
+    <form id="enquiry">
+      <label for="gym_name">Gym name</label>
+      <input id="gym_name" name="gym_name" maxlength="120" required>
+      <div class="two">
+        <div><label for="contact_name">Contact name</label><input id="contact_name" name="contact_name" maxlength="120" required></div>
+        <div><label for="contact_email">Email</label><input id="contact_email" type="email" name="contact_email" maxlength="254" required></div>
+      </div>
+      <div class="two">
+        <div><label for="phone">Phone</label><input id="phone" name="phone" maxlength="60"></div>
+        <div><label for="city">City</label><input id="city" name="city" maxlength="120"></div>
+      </div>
+      <label for="message">Anything we should know?</label>
+      <textarea id="message" name="message" maxlength="2000" placeholder="Disciplines you teach, approximate number of athletes, planned opening date, etc."></textarea>
+      <button type="submit">Send enquiry →</button>
+    </form>
+  </section>
+</div>
+<script>
+const flash = document.querySelector('#flash');
+document.querySelector('#enquiry').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button');
+  btn.disabled = true;
+  const data = Object.fromEntries(new FormData(e.target));
+  try {
+    const res = await fetch('/api/portal/gym_enquiries', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','X-Requested-With':'fetch'},
+      body: JSON.stringify(data),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || 'Could not submit the enquiry');
+    flash.className = 'flash show';
+    flash.textContent = 'Thanks — your enquiry has reached the W.U.C.O admin team. You will receive the full onboarding form by email once reviewed.';
+    e.target.reset();
+  } catch (err) {
+    flash.className = 'flash error show';
+    flash.textContent = err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

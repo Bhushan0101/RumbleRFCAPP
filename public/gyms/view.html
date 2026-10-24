@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0a2f23">
+<title>Gym · W.U.C.O</title>
+<link rel="stylesheet" href="../style.css">
+<style>
+body{background:#0a1510;color:#fff;font-family:Barlow,sans-serif}
+.gym-shell{max-width:1100px;margin:0 auto;padding:40px 24px 80px}
+.gym-top{display:flex;align-items:center;gap:14px;margin-bottom:28px}
+.gym-top img{width:46px;height:46px;object-fit:contain}
+.gym-top a{color:#d4af37;font:700 11px 'Barlow Condensed',Impact,sans-serif;letter-spacing:2px;border-bottom:1px solid #d4af37;padding-bottom:3px}
+.gym-head{display:grid;grid-template-columns:120px 1fr;gap:24px;align-items:center;padding:28px;background:#0a2f23;border:1px solid rgba(212,175,55,.3);margin-bottom:20px}
+.gym-head .logo{width:120px;height:120px;background:#07251b;display:grid;place-items:center;border:2px solid #d4af37;color:#d4af37;font:900 54px 'Barlow Condensed',Impact,sans-serif}
+.gym-head h1{font-family:'Barlow Condensed',Impact,sans-serif;font-size:42px;letter-spacing:2px;margin:0}
+.gym-head p.muted{color:#a9bfb6;margin:6px 0}
+.gym-head p.about{color:#dde8e3;margin:10px 0 0;line-height:1.6;max-width:720px}
+.panels{display:grid;grid-template-columns:1.3fr 1fr;gap:20px}
+.gym-panel{background:#0a2f23;border:1px solid rgba(212,175,55,.3);padding:24px}
+.gym-panel h2{color:#d4af37;font:700 16px 'Barlow Condensed',Impact,sans-serif;letter-spacing:2px;margin:0 0 14px;border-bottom:1px solid rgba(212,175,55,.2);padding-bottom:8px}
+.timetable-image{width:100%;border:1px solid rgba(212,175,55,.3);margin-top:12px}
+.class-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:8px}
+.class-cell{background:#07251b;padding:8px 10px;font-size:12px;border:1px solid rgba(212,175,55,.15)}
+.class-cell small{display:block;color:#d4af37;font-size:10px;letter-spacing:1.5px;margin-bottom:4px}
+.class-cell strong{display:block;color:#fff;font:700 13px 'Barlow Condensed',Impact,sans-serif;letter-spacing:1px}
+.class-cell button{margin-top:6px;background:#d4af37;color:#0a1510;border:0;padding:5px 8px;font:700 10px 'Barlow Condensed',Impact,sans-serif;letter-spacing:1px;cursor:pointer;width:100%}
+.day-col{display:flex;flex-direction:column;gap:4px}
+.day-col h3{color:#d4af37;font:700 11px 'Barlow Condensed',Impact,sans-serif;letter-spacing:2px;margin:0;text-align:center;padding:8px 0;background:#07251b;border-bottom:1px solid #d4af37}
+.product{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid rgba(212,175,55,.15)}
+.product:last-child{border-bottom:0}
+.product strong{display:block}
+.product small{color:#a9bfb6}
+.product .price{color:#d4af37;font:700 18px 'Barlow Condensed',Impact,sans-serif}
+.product a{background:#d4af37;color:#0a1510;padding:7px 12px;font:700 11px 'Barlow Condensed',Impact,sans-serif;letter-spacing:1px}
+.booking-dialog{position:fixed;inset:0;background:#0a1510cc;display:none;align-items:center;justify-content:center;z-index:50}
+.booking-dialog.open{display:flex}
+.booking-card{background:#0a2f23;border:2px solid #d4af37;padding:28px;max-width:420px;width:90%}
+.booking-card h3{color:#d4af37;margin:0 0 10px;font-family:'Barlow Condensed';letter-spacing:2px}
+.booking-card label{display:block;color:#fff;font:700 11px 'Barlow Condensed';letter-spacing:1.5px;margin:10px 0 4px}
+.booking-card input{width:100%;padding:10px;background:#07251b;color:#fff;border:1px solid #d4af37}
+.booking-card .row-btns{display:flex;gap:10px;margin-top:16px}
+.booking-card button{background:#d4af37;color:#0a1510;border:0;padding:10px 16px;font:700 11px 'Barlow Condensed';letter-spacing:1.5px;cursor:pointer;flex:1}
+.booking-card button.cancel{background:transparent;color:#d4af37;border:1px solid #d4af37}
+.flash{display:none;padding:12px 16px;background:#1a5a44;color:#fff;margin-bottom:16px}
+.flash.show{display:block}
+.flash.error{background:#8d2626}
+.join-row{margin-top:16px;padding:12px;background:#07251b;border:1px dashed #d4af37}
+.join-row button{background:#d4af37;color:#0a1510;border:0;padding:8px 14px;font:700 11px 'Barlow Condensed';letter-spacing:1.5px;cursor:pointer}
+.not-found{text-align:center;padding:60px 20px}
+.not-found h2{color:#d4af37;font:900 32px 'Barlow Condensed';letter-spacing:2px}
+@media(max-width:860px){.panels,.class-grid,.gym-head{grid-template-columns:1fr}.day-col{display:none}}
+</style>
+</head>
+<body>
+<div class="gym-shell">
+  <div class="gym-top">
+    <img src="../assets/logos/wuco-mark.png" alt="">
+    <a href="../index.html">← W.U.C.O WEBSITE</a>
+  </div>
+  <div id="flash" class="flash"></div>
+  <div id="content"></div>
+</div>
+<div class="booking-dialog" id="dialog">
+  <div class="booking-card">
+    <h3>BOOK CLASS</h3>
+    <p id="dialog-detail" style="color:#a9bfb6;font-size:13px"></p>
+    <label>Date</label><input type="date" id="booked-date">
+    <div id="guest-fields" hidden>
+      <label>Your name</label><input id="guest-name" maxlength="120">
+      <label>Your email</label><input id="guest-email" type="email" maxlength="254">
+    </div>
+    <div class="row-btns">
+      <button type="button" class="cancel" id="cancel">Cancel</button>
+      <button type="button" id="confirm">Confirm &amp; pay →</button>
+    </div>
+  </div>
+</div>
+<script>
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const KIND_LABEL = {day_pass:'Day pass',weekly_pass:'Weekly pass',monthly_pass:'Monthly pass',per_class:'Per-class drop-in'};
+const slug = (new URLSearchParams(location.search).get('slug') || '').trim().toLowerCase();
+const flash = document.querySelector('#flash');
+const content = document.querySelector('#content');
+const dialog = document.querySelector('#dialog');
+let activeClass = null;
+let isSignedIn = false;
+
+function money(cents) { return (cents/100).toLocaleString('en-IE',{style:'currency',currency:'EUR'}); }
+
+async function boot() {
+  if (!/^[a-z0-9-]{1,60}$/.test(slug)) {
+    content.innerHTML = '<div class="not-found"><h2>Gym not specified</h2><p>Add ?slug=… to the URL.</p></div>';
+    return;
+  }
+  try {
+    const state = await fetch('/api/portal/state', {headers:{'X-Requested-With':'fetch'}}).then(r=>r.json());
+    isSignedIn = !!state.user;
+  } catch {}
+  try {
+    const res = await fetch('/api/portal/gyms/' + encodeURIComponent(slug), {headers:{'X-Requested-With':'fetch'}});
+    if (res.status === 404) { content.innerHTML = '<div class="not-found"><h2>No gym here (yet)</h2><p>This gym page is not active.</p></div>'; return; }
+    if (!res.ok) throw new Error('Could not load gym');
+    render(await res.json());
+  } catch (err) {
+    content.innerHTML = '<div class="not-found"><h2>Could not load gym</h2><p>' + esc(err.message) + '</p></div>';
+  }
+}
+
+function render(gym) {
+  document.title = gym.name + ' · W.U.C.O';
+  const timetableImg = gym.timetable_image_url
+    ? `<img class="timetable-image" src="${esc(gym.timetable_image_url)}" alt="${esc(gym.name)} timetable">`
+    : '';
+  const grid = DAYS.map((d,i) => {
+    const classes = (gym.classes || []).filter(c => c.day_of_week === i);
+    const cells = classes.map(c =>
+      `<div class="class-cell"><small>${esc(c.start_time)}</small><strong>${esc(c.title)}</strong><small>${esc(c.discipline || '')} · ${c.duration_minutes}m</small><button data-class="${c.id}" data-title="${esc(c.title)}" data-day="${c.day_of_week}" data-time="${esc(c.start_time)}">Book</button></div>`
+    ).join('');
+    return `<div class="day-col"><h3>${d}</h3>${cells || '<div class="class-cell" style="opacity:.4">—</div>'}</div>`;
+  }).join('');
+  const products = (gym.products || []).map(p =>
+    `<div class="product"><div><strong>${esc(p.title)}</strong><small>${esc(KIND_LABEL[p.kind] || p.kind)}</small></div><div style="display:flex;gap:12px;align-items:center"><span class="price">${money(p.price_cents)}</span>${p.revolut_url ? `<a href="${esc(p.revolut_url)}" target="_blank" rel="noopener">Buy →</a>` : ''}</div></div>`
+  ).join('') || '<p style="color:#a9bfb6">No pricing products published yet.</p>';
+  content.innerHTML = `
+    <div class="gym-head">
+      <div class="logo">${esc((gym.name||'G')[0].toUpperCase())}</div>
+      <div>
+        <h1>${esc(gym.name)}</h1>
+        <p class="muted">${esc(gym.city || '')}${gym.revolut_handle ? ' · ' + esc(gym.revolut_handle) : ''}</p>
+        ${gym.about ? `<p class="about">${esc(gym.about)}</p>` : ''}
+        ${isSignedIn
+          ? `<div class="join-row">Join this gym — your request is approved by the gym admin. <button data-join="${esc(gym.slug)}">Request to join</button></div>`
+          : `<div class="join-row">Sign in with your W.U.C.O fighter account to request to join this gym.</div>`}
+      </div>
+    </div>
+    <div class="panels">
+      <div class="gym-panel">
+        <h2>WEEKLY TIMETABLE</h2>
+        ${timetableImg}
+        <div class="class-grid">${grid}</div>
+      </div>
+      <div class="gym-panel">
+        <h2>PASSES &amp; BOOKINGS</h2>
+        ${products}
+      </div>
+    </div>
+  `;
+}
+
+document.addEventListener('click', (e) => {
+  const bookBtn = e.target.closest('[data-class]');
+  if (bookBtn) {
+    activeClass = {id: bookBtn.dataset.class, title: bookBtn.dataset.title, day: bookBtn.dataset.day, time: bookBtn.dataset.time};
+    document.querySelector('#dialog-detail').textContent = activeClass.title + ' · ' + DAYS[activeClass.day] + ' ' + activeClass.time;
+    document.querySelector('#guest-fields').hidden = isSignedIn;
+    dialog.classList.add('open');
+    return;
+  }
+  if (e.target.id === 'cancel') dialog.classList.remove('open');
+  const joinBtn = e.target.closest('[data-join]');
+  if (joinBtn) requestJoin(joinBtn.dataset.join);
+});
+
+async function requestJoin(slug) {
+  try {
+    const res = await fetch('/api/portal/gym_join/request', {
+      method:'POST', headers:{'Content-Type':'application/json','X-Requested-With':'fetch'},
+      body: JSON.stringify({slug}),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || 'Request failed');
+    flash.className = 'flash show';
+    flash.textContent = 'Your join request has been sent to the gym admin.';
+  } catch (err) {
+    flash.className = 'flash error show';
+    flash.textContent = err.message;
+  }
+}
+
+document.querySelector('#confirm').addEventListener('click', async () => {
+  if (!activeClass) return;
+  const payload = {booked_for_date: document.querySelector('#booked-date').value};
+  if (!payload.booked_for_date) { alert('Pick a date'); return; }
+  if (!isSignedIn) {
+    payload.guest_name = document.querySelector('#guest-name').value.trim();
+    payload.guest_email = document.querySelector('#guest-email').value.trim();
+    if (!payload.guest_name || !payload.guest_email) { alert('Enter your name and email'); return; }
+  }
+  try {
+    const res = await fetch('/api/portal/classes/' + activeClass.id + '/book', {
+      method:'POST', headers:{'Content-Type':'application/json','X-Requested-With':'fetch'},
+      body: JSON.stringify(payload),
+    });
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.error || 'Booking failed');
+    dialog.classList.remove('open');
+    if (body.revolut_url) {
+      flash.className = 'flash show';
+      flash.textContent = 'Booking saved. Opening Revolut to complete payment…';
+      setTimeout(() => { location.href = body.revolut_url; }, 1200);
+    } else {
+      flash.className = 'flash show';
+      flash.textContent = 'Booking saved. Pay the gym directly to confirm your place.';
+    }
+  } catch (err) {
+    flash.className = 'flash error show';
+    flash.textContent = err.message;
+  }
+});
+
+boot();
+</script>
+</body>
+</html>

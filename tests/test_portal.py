@@ -11,7 +11,7 @@ from scripts.seed_portal_demo import seed
 class PortalTests(unittest.TestCase):
     def setUp(self):
         from unittest.mock import patch
-        self.environment=patch.dict('os.environ',{'WUCO_DEMO_MODE':'1','WUCO_PAYMENT_MODE':'demo'})
+        self.environment=patch.dict('os.environ',{'WUCO_DEMO_MODE':'1'})
         self.environment.start();self.addCleanup(self.environment.stop)
         self.tmp=tempfile.TemporaryDirectory()
         self.path=Path(self.tmp.name)/'test.sqlite3'
@@ -90,8 +90,6 @@ class PortalTests(unittest.TestCase):
         payload={'role':'fighter','name':'Independent','email':'solo@test.test','password':'LongPassword123','country':'Ireland','division':'Lightweight'}
         self.assertEqual(self.call('register','POST',payload)[0],200)
         aid=next(f['id'] for f in self.call('state',role='admin')[1]['fighters'] if f['name']=='Independent')
-        payment=self.call(f'applications/{aid}/checkout','POST',{},'admin')[1]['payment_id']
-        self.assertEqual(self.call(f'payments/{payment}/demo-confirm','POST',{'confirm':True},'admin')[0],200)
         self.assertEqual(self.call(f'fighters/{aid}/review','PUT',{'decision':'approved'},'admin')[0],200)
         self.assertEqual(self.call('rankings','PUT',{'athlete_id':aid,'position':1},'admin')[0],200)
         rankings=[r for r in self.call('state')[1]['rankings'] if r['division']=='Lightweight']

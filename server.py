@@ -383,7 +383,7 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _cookie_token(self):
         c=SimpleCookie(self.headers.get('Cookie',''))
-        return c['rfc_session'].value if 'rfc_session' in c else None
+        return c['wuco_session'].value if 'wuco_session' in c else None
 
     def _read_json(self,max_length=1_000_000):
         length=int(self.headers.get('Content-Length',0) or 0)
@@ -415,17 +415,6 @@ class Handler(SimpleHTTPRequestHandler):
         return True
 
     # -- GET ---------------------------------------------------------------
-    def _payment_webhook(self):
-        import portal
-        from portal_features.payments import webhook
-        try:
-            length=int(self.headers.get('Content-Length','0'))
-            if length<=0 or length>1_000_000:raise portal.Error('Missing or oversized webhook',400)
-            result=webhook(DB,self.rfile.read(length),self.headers.get('Stripe-Signature',''))
-            self._json(result)
-        except portal.Error as exc:self._json({'error':str(exc)},exc.status)
-        except ValueError:self._json({'error':'Invalid webhook'},400)
-
     def _portal(self, path):
         import portal
         try:
@@ -447,6 +436,12 @@ class Handler(SimpleHTTPRequestHandler):
             return self._portal(path)
         if path.startswith('/api/admin/'):
             self._admin_get(path);return
+        if path.startswith('/api/passport/'):
+            from wuco_passport import lookup
+            data = lookup(DB, path.removeprefix('/api/passport/'))
+            if data is None:
+                self.send_error(404,'Passport not found');return
+            self._json(data);return
         if path.startswith('/api/'):
             if path=='/api/health':
                 self._json({'status':'ok','database':'connected','schema_version':schema_version()});return
@@ -482,7 +477,6 @@ class Handler(SimpleHTTPRequestHandler):
     # -- POST --------------------------------------------------------------
     def do_POST(self):
         path=urlsplit(self.path).path
-        if path=='/api/payments/stripe/webhook':return self._payment_webhook()
         if path.startswith('/api/portal/'):
             return self._portal(path)
         if not path.startswith('/api/admin/'):
@@ -525,12 +519,12 @@ class Handler(SimpleHTTPRequestHandler):
         if not result:
             return self._json({'error':'invalid password'},401)
         token=issue_session()
-        cookie=f'rfc_session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age={SESSION_HOURS*3600}'
+        cookie=f'wuco_session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age={SESSION_HOURS*3600}'
         self._json({'ok':True},200,{'Set-Cookie':cookie})
 
     def _logout(self):
         revoke_session(self._cookie_token())
-        self._json({'ok':True},200,{'Set-Cookie':'rfc_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'})
+        self._json({'ok':True},200,{'Set-Cookie':'wuco_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'})
 
     def _create(self,collection):
         try: self._json(op_create(collection,self._read_json()),201)

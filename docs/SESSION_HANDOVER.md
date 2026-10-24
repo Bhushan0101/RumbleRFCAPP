@@ -1,16 +1,12 @@
 # W.U.C.O — Session Handover (pick up here next time)
 
-## Current W.U.C.O application, payment and event workflow
+## Current W.U.C.O application and event workflow
 
-The displayed brand is W.U.C.O. New fighters submit a private application, complete the EUR 10
-application fee, then require administrator approval before public listing, ranking publication or
-event registration. The Render stakeholder demo uses explicitly labelled TEST payments and PDF
-receipts; no real money is charged. Admin workspaces now include fighter approval/profile management
-and finance/date-filtered CSV reporting with separate live/test totals. Event entry supports category,
-capacity and deadline checks, confirmation references and safe withdrawal. Schema version is 6.
-See [WUCO_APPLICATIONS_PAYMENTS.md](WUCO_APPLICATIONS_PAYMENTS.md) for the full walkthrough, demo
-logins, receipt retention and the separate Stripe/durable-storage requirements for real charging.
-This current guide supersedes older descriptions below of instant registration or absent payments.
+New fighters submit a private application; an administrator reviews and approves (or rejects) it before
+public listing, ranking publication or event entry. **There is no application fee** — the previous
+€10 payment flow has been removed (migration 007). Event entry supports category, capacity and deadline
+checks, confirmation references and safe withdrawal. Schema version is 7. See
+[FUTURE_PLANS.md](FUTURE_PLANS.md) for provider payments and Apple Wallet, both intentionally parked.
 
 
 ## Current fighter / rankings UI update

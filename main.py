@@ -62,7 +62,7 @@ def _api(path):
 # ---- admin helpers (reuse server.py's hardened logic) ----
 def _cookie_token(environ):
     c = SimpleCookie(environ.get('HTTP_COOKIE', ''))
-    return c['rfc_session'].value if 'rfc_session' in c else None
+    return c['wuco_session'].value if 'wuco_session' in c else None
 
 
 def _body(environ,max_length=2_000_000):
@@ -106,11 +106,11 @@ def _admin(environ, method, path):
         if not result:
             return '401 Unauthorized', _jb({'error': 'invalid password'}), None
         token = S.issue_session()
-        cookie = f'rfc_session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age={S.SESSION_HOURS*3600}'
+        cookie = f'wuco_session={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age={S.SESSION_HOURS*3600}'
         return '200 OK', _jb({'ok': True}), [('Set-Cookie', cookie)]
     if method == 'POST' and rest == 'logout':
         S.revoke_session(_cookie_token(environ))
-        clear = 'rfc_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'
+        clear = 'wuco_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'
         return '200 OK', _jb({'ok': True}), [('Set-Cookie', clear)]
 
     # Everything below requires auth + CSRF
@@ -158,17 +158,6 @@ def app(environ, start_response):
     path = environ.get('PATH_INFO', '/')
     method = environ.get('REQUEST_METHOD', 'GET')
 
-    if path=='/api/payments/stripe/webhook':
-        from portal_features.payments import webhook
-        from portal import Error
-        from http import HTTPStatus
-        if method!='POST':return _respond(start_response,'405 Method Not Allowed',_jb({'error':'POST required'}))
-        try:
-            result=webhook(S.DB,_body(environ,max_length=1_000_000),environ.get('HTTP_STRIPE_SIGNATURE',''))
-            return _respond(start_response,'200 OK',_jb(result))
-        except Error as exc:return _respond(start_response,f'{exc.status} {HTTPStatus(exc.status).phrase}',_jb({'error':str(exc)}))
-        except (S.Invalid,ValueError):return _respond(start_response,'400 Bad Request',_jb({'error':'Invalid webhook'}))
-
     if path.startswith('/api/portal/'):
         import portal
         from http import HTTPStatus
@@ -195,6 +184,15 @@ def app(environ, start_response):
         except (ValueError, KeyError):
             status, body, extra = '400 Bad Request', _jb({'error': 'bad request'}), None
         return _respond(start_response, status, body, extra=extra)
+
+    if path.startswith('/api/passport/'):
+        if method not in ('GET', 'HEAD'):
+            return _respond(start_response, '405 Method Not Allowed', b'{"error":"method not allowed"}')
+        from wuco_passport import lookup
+        data = lookup(S.DB, path[len('/api/passport/'):])
+        if data is None:
+            return _respond(start_response, '404 Not Found', _jb({'error': 'passport not found'}))
+        return _respond(start_response, '200 OK', _jb(data))
 
     if path.startswith('/api/'):
         if method not in ('GET', 'HEAD'):
