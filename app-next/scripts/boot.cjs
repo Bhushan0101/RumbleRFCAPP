@@ -2,12 +2,17 @@
 // Applies Prisma migrations against the SQLite file on the persistent disk,
 // then seeds a baseline dataset if the DB is empty.
 //
-// Rendered as plain Node + CommonJS so it works in the standalone bundle
-// without needing tsx/ts-node.
+// Rendered as plain Node + CommonJS so it works without needing tsx/ts-node.
 
 const { execSync } = require("node:child_process");
 const path = require("node:path");
-const fs = require("node:fs");
+
+// Make sure we run everything from the Next.js app's directory, regardless
+// of where Render actually invokes us from. The `__dirname` of this file is
+// always .../app-next/scripts, so the app root is one level up.
+const appRoot = path.resolve(__dirname, "..");
+process.chdir(appRoot);
+console.log(`[boot] working dir: ${process.cwd()}`);
 
 function run(cmd) {
   console.log(`\n$ ${cmd}`);
