@@ -5,6 +5,7 @@
 // Rendered as plain Node + CommonJS so it works without needing tsx/ts-node.
 
 const { execSync } = require("node:child_process");
+const fs = require("node:fs");
 const path = require("node:path");
 
 // Make sure we run everything from the Next.js app's directory, regardless
@@ -13,6 +14,22 @@ const path = require("node:path");
 const appRoot = path.resolve(__dirname, "..");
 process.chdir(appRoot);
 console.log(`[boot] working dir: ${process.cwd()}`);
+
+// Ensure the directory for the SQLite file exists.
+// Render mounts the persistent disk at prisma/data on this project; locally
+// the dir may not exist yet.
+const dbUrl = process.env.DATABASE_URL || "";
+const match = dbUrl.match(/^file:(.+)$/);
+if (match) {
+  const dbPath = match[1].startsWith("/")
+    ? match[1]
+    : path.resolve(appRoot, match[1]);
+  const dir = path.dirname(dbPath);
+  if (!fs.existsSync(dir)) {
+    console.log(`[boot] creating DB directory: ${dir}`);
+    fs.mkdirSync(dir, { recursive: true });
+  }
+}
 
 function run(cmd) {
   console.log(`\n$ ${cmd}`);

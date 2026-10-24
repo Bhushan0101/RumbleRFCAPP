@@ -1,8 +1,10 @@
 # Render.com Infrastructure-as-Code for W.U.C.O Ireland
 # Deploy: push to GitHub, click "New Blueprint Instance", point at this file.
 #
-# One Web Service + one 1 GB persistent disk mounted at /opt/render/project/src/app-next/prisma
-# so the SQLite DB survives redeploys.
+# One Web Service + one 1 GB persistent disk mounted at
+# /opt/render/project/src/app-next/prisma/data so the SQLite DB survives
+# redeploys WITHOUT shadowing the committed prisma/schema.prisma +
+# migrations/ files.
 #
 # Env vars that MUST be set in the Render dashboard (never commit secrets):
 #   AUTH_SECRET            — openssl rand -base64 32
@@ -25,7 +27,7 @@ services:
       - key: NODE_VERSION
         value: "22.11.0"
       - key: DATABASE_URL
-        value: "file:/opt/render/project/src/app-next/prisma/dev.db"
+        value: "file:/opt/render/project/src/app-next/prisma/data/dev.db"
       - key: AUTH_SECRET
         generateValue: true     # Render auto-generates on first deploy
       - key: AUTH_URL
@@ -40,5 +42,5 @@ services:
         value: "10000"
     disk:
       name: wuco-sqlite
-      mountPath: /opt/render/project/src/app-next/prisma
+      mountPath: /opt/render/project/src/app-next/prisma/data
       sizeGB: 1
