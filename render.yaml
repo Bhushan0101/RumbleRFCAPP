@@ -17,8 +17,8 @@ services:
     plan: starter          # $7/mo — no cold starts. "free" plan sleeps after 15 min.
     region: frankfurt       # closest to Ireland
     rootDir: app-next
-    buildCommand: "npm install --legacy-peer-deps && npx prisma migrate deploy && npm run build"
-    startCommand: "node .next/standalone/server.js"
+    buildCommand: "npm install --legacy-peer-deps && npm run build"
+    startCommand: "node scripts/boot.cjs"
     healthCheckPath: /
     autoDeploy: true
     envVars:
