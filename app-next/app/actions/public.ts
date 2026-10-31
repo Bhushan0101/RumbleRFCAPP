@@ -160,7 +160,7 @@ export async function registerFighter(
   if (existing) {
     return { ok: false, message: "An account with that email already exists." };
   }
-  const { salt, hash } = hashPassword(d.password);
+  const { salt, hash } = await hashPassword(d.password);
   const name = `${d.first_name} ${d.last_name}`.trim();
   await prisma.$transaction(async (tx) => {
     const user = await tx.portalUser.create({

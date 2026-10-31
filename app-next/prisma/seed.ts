@@ -14,7 +14,7 @@ async function upsertUser(opts: {
   role: string;
   password: string;
 }) {
-  const { salt, hash } = hashPassword(opts.password);
+  const { salt, hash } = await hashPassword(opts.password);
   return prisma.portalUser.upsert({
     where: { email: opts.email },
     update: {},

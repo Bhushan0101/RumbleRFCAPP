@@ -9,12 +9,20 @@
     "lint": "eslint",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate deploy",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "cf:build": "opennextjs-cloudflare build",
+    "cf:preview": "opennextjs-cloudflare preview",
+    "cf:deploy": "opennextjs-cloudflare deploy",
+    "cf:d1:migrate": "wrangler d1 migrations apply wuco-prod --remote",
+    "cf:d1:migrate:local": "wrangler d1 migrations apply wuco-prod --local"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.3",
     "@hookform/resolvers": "^3.10.0",
+    "@prisma/adapter-better-sqlite3": "^7.10.1",
+    "@prisma/adapter-d1": "^7.10.1",
     "@prisma/client": "^6.19.3",
+    "better-sqlite3": "^13.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.61.0",
@@ -29,6 +37,8 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261031.1",
+    "@opennextjs/cloudflare": "^1.20.15",
     "@tailwindcss/turbopack": "^4",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
@@ -43,6 +53,7 @@
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5",
-    "vitest": "^5.0.5"
+    "vitest": "^5.0.5",
+    "wrangler": "^4.156.0"
   }
 }

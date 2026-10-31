@@ -38,6 +38,12 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
+
+# cloudflare
+.open-next/
+.wrangler/
+# allow the committed cloudflare reference file
+!.env.cloudflare
 next-env.d.ts
 app-next/prisma/data/
 app-next/prisma/prisma/

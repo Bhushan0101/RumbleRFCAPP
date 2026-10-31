@@ -22,7 +22,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         if (!email || !password || password.length > 128) return null;
         const user = await prisma.portalUser.findUnique({ where: { email } });
         if (!user) return null;
-        if (!verifyPassword(password, user.salt, user.passwordHash)) return null;
+        if (!(await verifyPassword(password, user.salt, user.passwordHash))) return null;
         return {
           id: String(user.id),
           email: user.email,

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { Container } from "@/components/ui/container";
 import { PageHeader } from "@/components/site/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
-import { reviewFighter } from "@/app/actions/admin";
+import { ReviewForm } from "@/components/forms/review-form";
 import { updateFighter } from "@/app/actions/admin-editor";
 
 export const metadata = { title: "Admin · Fighters" };
@@ -140,45 +140,15 @@ export default async function AdminFightersPage({
 
                 <div className="grid gap-4 md:grid-cols-2">
                   {/* Decision form */}
-                  <form action={reviewFighter} className="space-y-3">
-                    <h4 className="font-display text-xs tracking-wider text-gold uppercase">
+                  <div>
+                    <h4 className="font-display text-xs tracking-wider text-gold uppercase mb-3">
                       Review decision
                     </h4>
-                    <input
-                      type="hidden"
-                      name="athlete_id"
-                      value={a.athleteId}
+                    <ReviewForm
+                      athleteId={a.athleteId}
+                      currentStatus={a.approvalStatus}
                     />
-                    <select
-                      name="decision"
-                      defaultValue={
-                        a.approvalStatus === "approved" ? "suspended" : "approved"
-                      }
-                      className="w-full px-3 py-2 bg-bg border border-border text-white"
-                    >
-                      {a.approvalStatus === "approved" ? (
-                        <option value="suspended">Suspend profile</option>
-                      ) : (
-                        <>
-                          <option value="approved">Approve fighter</option>
-                          <option value="rejected">Decline application</option>
-                        </>
-                      )}
-                    </select>
-                    <textarea
-                      name="note"
-                      rows={2}
-                      maxLength={2000}
-                      placeholder="Required for a decline or suspension."
-                      className="w-full px-3 py-2 bg-bg border border-border text-white text-sm"
-                    />
-                    <button
-                      type="submit"
-                      className="bg-gold text-bg px-4 py-2 font-display text-xs tracking-wider hover:bg-gold-hi"
-                    >
-                      Save decision →
-                    </button>
-                  </form>
+                  </div>
 
                   {/* Full edit form */}
                   <details className="bg-bg border border-border">

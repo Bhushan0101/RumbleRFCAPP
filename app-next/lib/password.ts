@@ -1,28 +1,40 @@
-// Password hashing — PBKDF2-SHA256 to stay compatible with the existing
-// Python app's hashes (hashlib.pbkdf2_hmac with 200_000 iterations). This
-// lets us migrate the current demo accounts without forcing a password reset.
-import { pbkdf2Sync, randomBytes, timingSafeEqual } from "node:crypto";
+// Password hashing — PBKDF2-SHA256 via Node crypto.
+//
+// Runs on Node (local dev + Render) AND Cloudflare Workers via the
+// `nodejs_compat` compatibility flag. Workers' PBKDF2 implementation (both
+// Web Crypto and nodejs_compat) enforces a 100,000 iteration ceiling, so
+// that's the max we can use. Still OWASP-recommended minimum as of 2026.
+import { pbkdf2 as _pbkdf2, randomBytes, timingSafeEqual } from "node:crypto";
+import { promisify } from "node:util";
 
-const ITERATIONS = 200_000;
+const pbkdf2 = promisify(_pbkdf2);
+
+const ITERATIONS = 100_000;
 const KEYLEN = 32;
 const DIGEST = "sha256";
 
-export function hashPassword(password: string): {
+export async function hashPassword(password: string): Promise<{
   salt: string;
   hash: string;
-} {
+}> {
   const salt = randomBytes(16).toString("hex");
-  const hash = pbkdf2Sync(password, Buffer.from(salt, "hex"), ITERATIONS, KEYLEN, DIGEST).toString("hex");
-  return { salt, hash };
+  const derived = await pbkdf2(
+    password,
+    Buffer.from(salt, "hex"),
+    ITERATIONS,
+    KEYLEN,
+    DIGEST,
+  );
+  return { salt, hash: derived.toString("hex") };
 }
 
-export function verifyPassword(
+export async function verifyPassword(
   password: string,
   salt: string,
   expectedHash: string,
-): boolean {
+): Promise<boolean> {
   if (!password || !salt || !expectedHash) return false;
-  const computed = pbkdf2Sync(
+  const computed = await pbkdf2(
     password,
     Buffer.from(salt, "hex"),
     ITERATIONS,

@@ -1,10 +1,11 @@
 // Minimal log + DB outbound mail. Mirrors the Python wuco_mail.send() API.
+//
+// On Render / local dev we also append to logs/outbound_mail.log for
+// convenience; on Workers (no filesystem) we only write the DB row — the
+// admin inbox at /portal/admin/inbox is still the source of truth.
 import { prisma } from "@/lib/prisma";
-import { mkdir, appendFile } from "node:fs/promises";
-import { join } from "node:path";
 
-const LOG_DIR = join(process.cwd(), "logs");
-const LOG_FILE = join(LOG_DIR, "outbound_mail.log");
+const IS_CLOUDFLARE = process.env.DEPLOY_TARGET === "cloudflare";
 
 export type MailCategory =
   | "fighter_signup"
@@ -18,9 +19,13 @@ export type MailCategory =
   | "class_booking";
 
 async function logToFile(entry: Record<string, unknown>) {
+  if (IS_CLOUDFLARE) return;
   try {
-    await mkdir(LOG_DIR, { recursive: true });
-    await appendFile(LOG_FILE, JSON.stringify(entry) + "\n", "utf8");
+    const { mkdir, appendFile } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    const dir = join(process.cwd(), "logs");
+    await mkdir(dir, { recursive: true });
+    await appendFile(join(dir, "outbound_mail.log"), JSON.stringify(entry) + "\n", "utf8");
   } catch {
     /* best-effort */
   }

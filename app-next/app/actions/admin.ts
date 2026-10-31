@@ -2,11 +2,17 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { randomBytes } from "node:crypto";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sendMail } from "@/lib/mail";
 import { hashPassword } from "@/lib/password";
+
+function randomBase64Url(bytes: number): string {
+  const buf = crypto.getRandomValues(new Uint8Array(bytes));
+  let bin = "";
+  for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
 
 async function requireAdmin() {
   const session = await auth();
@@ -29,59 +35,84 @@ const reviewSchema = z.object({
   note: z.string().max(2000).optional().default(""),
 });
 
-export async function reviewFighter(formData: FormData) {
-  const admin = await requireAdmin();
-  const parsed = reviewSchema.parse(Object.fromEntries(formData));
-  await prisma.$transaction(async (tx) => {
-    const profile = await tx.fighterProfile.findUnique({
-      where: { athleteId: parsed.athlete_id },
-      include: { athlete: true, user: true },
-    });
-    if (!profile) throw new Error("Fighter not found");
-    await tx.fighterProfile.update({
-      where: { athleteId: parsed.athlete_id },
-      data: {
-        approvalStatus: parsed.decision,
-        reviewedById: Number(admin.id),
-        reviewedAt: new Date(),
-        reviewNote: parsed.note,
-      },
-    });
-    await tx.applicationAudit.create({
-      data: {
-        athleteId: parsed.athlete_id,
-        actorId: Number(admin.id),
-        action: parsed.decision,
-        note: parsed.note,
-      },
-    });
-    if (parsed.decision === "approved") {
-      const existing = await tx.fighterPassport.findUnique({
-        where: { athleteId: parsed.athlete_id },
+export type ReviewState = { ok: boolean; message: string };
+
+export async function reviewFighter(
+  _prev: ReviewState,
+  formData: FormData,
+): Promise<ReviewState> {
+  try {
+    const admin = await requireAdmin();
+    const parsed = reviewSchema.safeParse(Object.fromEntries(formData));
+    if (!parsed.success) {
+      return { ok: false, message: "Invalid review form data." };
+    }
+    const p = parsed.data;
+    let fighterNo: string | null = null;
+    await prisma.$transaction(async (tx) => {
+      const profile = await tx.fighterProfile.findUnique({
+        where: { athleteId: p.athlete_id },
+        include: { athlete: true, user: true },
       });
-      if (!existing) {
-        await tx.fighterPassport.create({
-          data: {
-            athleteId: parsed.athlete_id,
-            fighterNo: await nextFighterNo(),
-          },
+      if (!profile) throw new Error("Fighter not found");
+      await tx.fighterProfile.update({
+        where: { athleteId: p.athlete_id },
+        data: {
+          approvalStatus: p.decision,
+          reviewedById: Number(admin.id),
+          reviewedAt: new Date(),
+          reviewNote: p.note,
+        },
+      });
+      await tx.applicationAudit.create({
+        data: {
+          athleteId: p.athlete_id,
+          actorId: Number(admin.id),
+          action: p.decision,
+          note: p.note,
+        },
+      });
+      if (p.decision === "approved") {
+        const existing = await tx.fighterPassport.findUnique({
+          where: { athleteId: p.athlete_id },
+        });
+        if (existing) {
+          fighterNo = existing.fighterNo;
+        } else {
+          fighterNo = await nextFighterNo();
+          await tx.fighterPassport.create({
+            data: { athleteId: p.athlete_id, fighterNo },
+          });
+        }
+      }
+      if (profile.user?.email) {
+        await sendMail({
+          to: profile.user.email,
+          subject: `W.U.C.O: your application was ${p.decision}`,
+          body: `Hi ${profile.athlete.name},\n\nYour fighter application has been ${p.decision}.${p.note ? `\n\nAdmin note: ${p.note}` : ""}\n\n— W.U.C.O Ireland`,
+          category:
+            p.decision === "approved" ? "fighter_approved" : "fighter_rejected",
         });
       }
-    }
-    if (profile.user?.email) {
-      await sendMail({
-        to: profile.user.email,
-        subject: `W.U.C.O: your application was ${parsed.decision}`,
-        body: `Hi ${profile.athlete.name},\n\nYour fighter application has been ${parsed.decision}.${parsed.note ? `\n\nAdmin note: ${parsed.note}` : ""}\n\n— W.U.C.O Ireland`,
-        category:
-          parsed.decision === "approved"
-            ? "fighter_approved"
-            : "fighter_rejected",
-      });
-    }
-  });
-  revalidatePath("/portal/admin/fighters");
-  revalidatePath("/");
+    });
+    revalidatePath("/portal/admin/fighters");
+    revalidatePath("/portal");
+    revalidatePath("/");
+    return {
+      ok: true,
+      message:
+        p.decision === "approved"
+          ? `Approved — passport ${fighterNo} issued.`
+          : `Marked as ${p.decision}.`,
+    };
+  } catch (e) {
+    console.error("[reviewFighter] failed:", e);
+    return {
+      ok: false,
+      message:
+        e instanceof Error ? e.message : "Review failed. Check server logs.",
+    };
+  }
 }
 
 // -------- GYM ENQUIRY FLOW ----------------------------------------------
@@ -90,7 +121,7 @@ export async function inviteGym(formData: FormData) {
   const enquiryId = Number(formData.get("enquiry_id"));
   const enquiry = await prisma.gymEnquiry.findUnique({ where: { id: enquiryId } });
   if (!enquiry) throw new Error("Enquiry not found");
-  const token = randomBytes(24).toString("base64url");
+  const token = randomBase64Url(24);
   const expires = Math.floor(Date.now() / 1000) + 14 * 24 * 3600;
   await prisma.$transaction([
     prisma.gymOnboardingToken.create({
@@ -144,8 +175,8 @@ export async function approveGymEnquiry(formData: FormData) {
   });
   if (!gym) throw new Error("No matching gym onboarding found");
 
-  const tempPassword = randomBytes(8).toString("base64url");
-  const { salt, hash } = hashPassword(tempPassword);
+  const tempPassword = randomBase64Url(8);
+  const { salt, hash } = await hashPassword(tempPassword);
   await prisma.$transaction([
     prisma.portalUser.create({
       data: {

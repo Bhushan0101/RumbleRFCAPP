@@ -1,0 +1,32 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "wuco-ireland",
+  "account_id": "040f79d4c5d58593ccc38e077712e808",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-09-23",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    "DEPLOY_TARGET": "cloudflare",
+    "NEXT_PUBLIC_SITE_URL": "https://wucoireland.ie",
+    "WUCO_ADMIN_INBOX": "ops@wuco.ie"
+  },
+  // D1 binding. `database_id` is filled in after `wrangler d1 create wuco-prod`.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "wuco-prod",
+      "database_id": "55d715ea-1683-4bde-94b8-ec83556dd674",
+      "migrations_dir": "prisma/migrations-d1"
+    }
+  ]
+  // Secrets (set via `wrangler secret put <NAME>`):
+  //   AUTH_SECRET  — NextAuth JWT signing key
+  //   AUTH_URL     — https://wucoireland.ie
+}
