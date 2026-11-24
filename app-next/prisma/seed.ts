@@ -59,28 +59,38 @@ async function main() {
   console.log(`  users: admin / ranking_admin / promoter / fighter`);
 
   // --- Approved fighters (seeded, high quality) ---
-  const approved = [
-    { name: "Conor Byrne",    class: "B", martial: "K-1",                division: "Lightweight",  country: "Ireland",       wins: 5,  losses: 1, draws: 0, userId: fighterUser.id },
-    { name: "Aoife Walsh",    class: "A", martial: "MMA",                division: "Featherweight",country: "Ireland",       wins: 8,  losses: 2, draws: 0 },
-    { name: "Darius Kane",    class: "A", martial: "Kickboxing",         division: "Lightweight",  country: "Ireland",       wins: 11, losses: 3, draws: 1 },
-    { name: "Diego Santos",   class: "B", martial: "Brazilian Jiu Jitsu",division: "Featherweight",country: "Brazil",        wins: 6,  losses: 2, draws: 0 },
-    { name: "Kenji Arai",     class: "A", martial: "MMA",                division: "Lightweight",  country: "Japan",         wins: 14, losses: 1, draws: 0 },
-    { name: "Molly Rourke",   class: "N", martial: "K-1",                division: "Featherweight",country: "Ireland",       wins: 3,  losses: 0, draws: 0 },
-    { name: "Shea O'Mahony",  class: "C", martial: "Kickboxing",         division: "Lightweight",  country: "Ireland",       wins: 2,  losses: 1, draws: 0 },
-    { name: "Lara Mazzotti",  class: "B", martial: "Muay Thai",          division: "Featherweight",country: "Italy",         wins: 7,  losses: 2, draws: 1 },
-    { name: "Pádraig Nolan",  class: "A", martial: "MMA",                division: "Lightweight",  country: "Ireland",       wins: 10, losses: 4, draws: 0 },
-    { name: "Niamh Doyle",    class: "B", martial: "Kickboxing",         division: "Featherweight",country: "Ireland",       wins: 6,  losses: 3, draws: 0 },
-    { name: "Rónan Kelly",    class: "C", martial: "K-1",                division: "Lightweight",  country: "Ireland",       wins: 1,  losses: 0, draws: 0 },
-    { name: "Siobhán Casey",  class: "A", martial: "MMA",                division: "Featherweight",country: "Ireland",       wins: 9,  losses: 2, draws: 0 },
+  // `extra` = secondary disciplines (same shape as primary: class + W-L-D).
+  // The primary (martial/class/wins/losses/draws) is mirrored onto the Athlete row.
+  type Secondary = { martial: string; class: string; wins: number; losses: number; draws: number };
+  const approved: Array<{
+    name: string; gender: string; class: string; martial: string;
+    division: string; country: string; wins: number; losses: number; draws: number;
+    userId?: number; extra?: Secondary[];
+  }> = [
+    { name: "Conor Byrne",    gender: "male",   class: "B",            martial: "kickboxing", division: "M-70kg",            country: "Ireland", wins: 5,  losses: 1, draws: 0, userId: fighterUser.id,
+      extra: [{ martial: "muay-thai", class: "N", wins: 2, losses: 0, draws: 0 }] },
+    { name: "Aoife Walsh",    gender: "female", class: "elite",        martial: "mma",        division: "MMA-Featherweight", country: "Ireland", wins: 8,  losses: 2, draws: 0 },
+    { name: "Darius Kane",    gender: "male",   class: "A",            martial: "kickboxing", division: "M-70kg",            country: "Ireland", wins: 11, losses: 3, draws: 1,
+      extra: [{ martial: "boxing", class: "elite", wins: 4, losses: 1, draws: 0 }] },
+    { name: "Mateus Silva",   gender: "male",   class: "A",            martial: "muay-thai",  division: "M-70kg",            country: "Brazil",  wins: 7,  losses: 1, draws: 0 },
+    { name: "Kenji Arai",     gender: "male",   class: "pro",          martial: "mma",        division: "MMA-Lightweight",   country: "Japan",   wins: 14, losses: 1, draws: 0 },
+    { name: "Molly Rourke",   gender: "female", class: "N",            martial: "kickboxing", division: "F-57kg",            country: "Ireland", wins: 3,  losses: 0, draws: 0 },
+    { name: "Shea O'Mahony",  gender: "male",   class: "C",            martial: "kickboxing", division: "M-67kg",            country: "Ireland", wins: 2,  losses: 1, draws: 0,
+      extra: [{ martial: "muay-thai", class: "L", wins: 1, losses: 1, draws: 0 }] },
+    { name: "Lara Mazzotti",  gender: "female", class: "intermediate", martial: "boxing",     division: "F-60kg",            country: "Italy",   wins: 7,  losses: 2, draws: 1 },
+    { name: "Pádraig Nolan",  gender: "male",   class: "elite",        martial: "mma",        division: "MMA-Lightweight",   country: "Ireland", wins: 10, losses: 4, draws: 0 },
+    { name: "Niamh Doyle",    gender: "female", class: "B",            martial: "kickboxing", division: "F-55kg",            country: "Ireland", wins: 6,  losses: 3, draws: 0 },
+    { name: "Rónan Kelly",    gender: "male",   class: "C",            martial: "kickboxing", division: "M-63kg",            country: "Ireland", wins: 1,  losses: 0, draws: 0 },
+    { name: "Siobhán Casey",  gender: "female", class: "pro",          martial: "mma",        division: "MMA-Featherweight", country: "Ireland", wins: 9,  losses: 2, draws: 0 },
   ];
 
   const pending = [
-    { name: "Fiona Donnelly", class: "N", martial: "K-1",       division: "Featherweight", country: "Ireland" },
-    { name: "Oisín Murphy",   class: "L", martial: "Kickboxing",division: "Lightweight",   country: "Ireland" },
+    { name: "Fiona Donnelly", gender: "female", class: "N", martial: "kickboxing", division: "F-57kg", country: "Ireland" },
+    { name: "Oisín Murphy",   gender: "male",   class: "L", martial: "kickboxing", division: "M-60kg", country: "Ireland" },
   ];
 
   const rejected = [
-    { name: "Rejected Example", class: "N", martial: "MMA", division: "Lightweight", country: "Ireland", note: "Insufficient documentation." },
+    { name: "Rejected Example", gender: "male", class: "novice", martial: "mma", division: "MMA-Lightweight", country: "Ireland", note: "Insufficient documentation." },
   ];
 
   // Clear slate and reseed deterministically — safe because this is dev data.
@@ -89,6 +99,7 @@ async function main() {
       where: { id: i + 1 },
       update: {
         name: f.name,
+        gender: f.gender,
         division: f.division,
         country: f.country,
         classCode: f.class,
@@ -99,6 +110,7 @@ async function main() {
       },
       create: {
         name: f.name,
+        gender: f.gender,
         division: f.division,
         country: f.country,
         wins: f.wins,
@@ -128,6 +140,33 @@ async function main() {
         fighterNo: `IRL-${String(i + 1).padStart(6, "0")}`,
       },
     });
+
+    // Rebuild discipline rows deterministically.
+    await prisma.athleteDiscipline.deleteMany({ where: { athleteId: athlete.id } });
+    await prisma.athleteDiscipline.create({
+      data: {
+        athleteId: athlete.id,
+        martialArt: f.martial,
+        classCode: f.class,
+        wins: f.wins,
+        losses: f.losses,
+        draws: f.draws,
+        isPrimary: 1,
+      },
+    });
+    for (const s of f.extra ?? []) {
+      await prisma.athleteDiscipline.create({
+        data: {
+          athleteId: athlete.id,
+          martialArt: s.martial,
+          classCode: s.class,
+          wins: s.wins,
+          losses: s.losses,
+          draws: s.draws,
+          isPrimary: 0,
+        },
+      });
+    }
   }
 
   for (const [i, f] of pending.entries()) {
@@ -136,6 +175,7 @@ async function main() {
       where: { id },
       update: {
         name: f.name,
+        gender: f.gender,
         division: f.division,
         country: f.country,
         classCode: f.class,
@@ -143,6 +183,7 @@ async function main() {
       },
       create: {
         name: f.name,
+        gender: f.gender,
         division: f.division,
         country: f.country,
         classCode: f.class,
@@ -159,6 +200,15 @@ async function main() {
         legacyMember: 0,
       },
     });
+    await prisma.athleteDiscipline.deleteMany({ where: { athleteId: athlete.id } });
+    await prisma.athleteDiscipline.create({
+      data: {
+        athleteId: athlete.id,
+        martialArt: f.martial,
+        classCode: f.class,
+        isPrimary: 1,
+      },
+    });
   }
 
   for (const [i, f] of rejected.entries()) {
@@ -167,6 +217,7 @@ async function main() {
       where: { id },
       update: {
         name: f.name,
+        gender: f.gender,
         division: f.division,
         country: f.country,
         classCode: f.class,
@@ -174,6 +225,7 @@ async function main() {
       },
       create: {
         name: f.name,
+        gender: f.gender,
         division: f.division,
         country: f.country,
         classCode: f.class,
@@ -191,6 +243,15 @@ async function main() {
         legacyMember: 0,
       },
     });
+    await prisma.athleteDiscipline.deleteMany({ where: { athleteId: athlete.id } });
+    await prisma.athleteDiscipline.create({
+      data: {
+        athleteId: athlete.id,
+        martialArt: f.martial,
+        classCode: f.class,
+        isPrimary: 1,
+      },
+    });
   }
   console.log(`  fighters: ${approved.length} approved · ${pending.length} pending · ${rejected.length} rejected`);
 
@@ -206,7 +267,7 @@ async function main() {
         city: "Dublin",
         slug: "monarch-fight-academy",
         about:
-          "A modern Irish combat sports gym offering K-1, Brazilian Jiu Jitsu, Kids classes and women-only sessions.",
+          "A modern Irish combat sports gym offering Kickboxing (K-1), Muay Thai, Boxing and Kids classes.",
         revolutHandle: "revolut.me/monarchfight",
         timetableImageUrl: "/brand/monarch-timetable.png",
         joinCode: "MONARCH1",
@@ -230,17 +291,17 @@ async function main() {
       });
     }
     const classes = [
-      ["Kickboxing (K-1)",             "K-1",                     1, "07:45", 60, 25],
-      ["Kickboxing (K-1)",             "K-1",                     3, "07:45", 60, 25],
-      ["Kids Kickboxing (K-1)",        "K-1",                     5, "11:00", 60, 25],
-      ["Open Mat (GI & No GI)",        "Brazilian Jiu Jitsu",     6, "15:00", 90, 30],
-      ["Kids BJJ (GI)",                "Brazilian Jiu Jitsu",     0, "17:00", 60, 25],
-      ["Kids Kickboxing (K-1)",        "K-1",                     1, "17:00", 60, 25],
-      ["Kickboxing (K-1)",             "K-1",                     0, "18:00", 60, 30],
-      ["No Gi Jiu Jitsu",              "Brazilian Jiu Jitsu",     1, "18:00", 60, 30],
-      ["Women-only Kickboxing (K-1)",  "K-1",                     2, "18:00", 60, 25],
-      ["Brazilian Jiu Jitsu (GI)",     "Brazilian Jiu Jitsu",     0, "19:30", 60, 30],
-      ["No Gi Jiu Jitsu",              "Brazilian Jiu Jitsu",     3, "19:30", 60, 30],
+      ["Kickboxing (K-1)",             "K-1",          1, "07:45", 60, 25],
+      ["Kickboxing (K-1)",             "K-1",          3, "07:45", 60, 25],
+      ["Kids Kickboxing (K-1)",        "K-1",          5, "11:00", 60, 25],
+      ["Muay Thai (Open Mat)",         "Muay Thai",    6, "15:00", 90, 30],
+      ["Kids Boxing",                  "Boxing",       0, "17:00", 60, 25],
+      ["Kids Kickboxing (K-1)",        "K-1",          1, "17:00", 60, 25],
+      ["Kickboxing (K-1)",             "K-1",          0, "18:00", 60, 30],
+      ["Muay Thai (Intermediate)",     "Muay Thai",    1, "18:00", 60, 30],
+      ["Women-only Kickboxing (K-1)",  "K-1",          2, "18:00", 60, 25],
+      ["Boxing (All levels)",          "Boxing",       0, "19:30", 60, 30],
+      ["Muay Thai (Advanced)",         "Muay Thai",    3, "19:30", 60, 30],
     ] as const;
     for (const [title, discipline, day, start, duration, cap] of classes) {
       await prisma.gymClass.create({
@@ -293,7 +354,7 @@ async function main() {
         ["Conor Byrne", "Darius Kane",   "Main event"],
         ["Aoife Walsh", "Molly Rourke",  "Co-main"],
         ["Kenji Arai", "Pádraig Nolan", "Featured"],
-        ["Diego Santos", "Shea O'Mahony","Prelim"],
+        ["Mateus Silva", "Shea O'Mahony","Prelim"],
       ] as const;
       for (const [i, [redName, blueName, section]] of lineup.entries()) {
         const red = await prisma.athlete.findFirst({ where: { name: redName } });
@@ -315,31 +376,25 @@ async function main() {
   }
 
   // --- Rankings ---
-  const topFeather = await prisma.athlete.findMany({
-    where: { division: "Featherweight", profile: { approvalStatus: "approved" } },
-    orderBy: { wins: "desc" },
-    take: 5,
-  });
-  const topLight = await prisma.athlete.findMany({
-    where: { division: "Lightweight", profile: { approvalStatus: "approved" } },
-    orderBy: { wins: "desc" },
-    take: 5,
-  });
-  for (const [pos, a] of [...topFeather.entries()]) {
-    await prisma.ranking.upsert({
-      where: { athleteId_division: { athleteId: a.id, division: a.division } },
-      update: { position: pos + 1 },
-      create: { athleteId: a.id, division: a.division, position: pos + 1 },
+  // Group approved fighters by their current division and rank the top 5 by wins.
+  const rankedDivisions = ["M-70kg", "M-67kg", "F-57kg", "F-60kg", "MMA-Lightweight", "MMA-Featherweight"];
+  let rankingCount = 0;
+  for (const division of rankedDivisions) {
+    const top = await prisma.athlete.findMany({
+      where: { division, profile: { approvalStatus: "approved" } },
+      orderBy: { wins: "desc" },
+      take: 5,
     });
+    for (const [pos, a] of top.entries()) {
+      await prisma.ranking.upsert({
+        where: { athleteId_division: { athleteId: a.id, division } },
+        update: { position: pos + 1 },
+        create: { athleteId: a.id, division, position: pos + 1 },
+      });
+      rankingCount++;
+    }
   }
-  for (const [pos, a] of [...topLight.entries()]) {
-    await prisma.ranking.upsert({
-      where: { athleteId_division: { athleteId: a.id, division: a.division } },
-      update: { position: pos + 1 },
-      create: { athleteId: a.id, division: a.division, position: pos + 1 },
-    });
-  }
-  console.log(`  rankings: ${topFeather.length + topLight.length} entries`);
+  console.log(`  rankings: ${rankingCount} entries`);
 
   // --- Dummy activity for dashboard ---
   const now = Date.now();

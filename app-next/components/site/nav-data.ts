@@ -32,5 +32,6 @@ export const NAV: NavItem[] = [
       { label: "Promoter Directory", href: "/promoters" },
     ],
   },
+  { label: "News", href: "/news" },
   { label: "About Us", href: "/about" },
 ];

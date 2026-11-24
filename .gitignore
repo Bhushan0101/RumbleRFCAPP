@@ -28,3 +28,4 @@ app-next/.env
 app-next/.env.local
 app-next/.env.*.local
 app-next/logs/
+app-next/public/uploads/

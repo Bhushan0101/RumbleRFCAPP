@@ -5,6 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { Container } from "@/components/ui/container";
 import { PageHeader } from "@/components/site/page-header";
 import { signOutAction } from "@/app/actions/auth";
+import { martialArtName, classDisplayName, martialArtRequiresClass } from "@/lib/martial-arts";
+import { divisionDisplayName, divisionShortLabel } from "@/lib/divisions";
+import { completenessScore, completenessSteps } from "@/lib/completeness";
 import {
   Users,
   UserPlus,
@@ -179,7 +182,7 @@ async function AdminDashboard({ name }: { name: string }) {
                         {a.name}
                       </span>
                       <span className="text-xs text-muted">
-                        {a.passport?.fighterNo} · {a.classCode ?? "—"} · {a.division}
+                        {a.passport?.fighterNo} · {classDisplayName(a.martialArt, a.classCode) || martialArtName(a.martialArt) || "—"} · {divisionShortLabel(a.division) || "—"}
                       </span>
                     </span>
                   </span>
@@ -287,12 +290,15 @@ async function AdminDashboard({ name }: { name: string }) {
         </section>
 
         {/* Quick links */}
-        <section className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <section className="grid grid-cols-2 md:grid-cols-6 gap-3">
           <QuickTile href="/portal/admin/fighters" title="Fighters" />
           <QuickTile href="/portal/admin/events" title="Events & bouts" />
           <QuickTile href="/portal/admin/rankings" title="Rankings" />
           <QuickTile href="/portal/admin/gyms" title="Gym enquiries" />
+          <QuickTile href="/portal/admin/news" title="News posts" />
           <QuickTile href="/portal/admin/inbox" title="Inbox" />
+          <QuickTile href="/portal/admin/account-deletions" title="Deletion requests" />
+          <QuickTile href="/portal/admin/verifications" title="Verification requests" />
         </section>
 
         <form action={signOutAction}>
@@ -310,9 +316,29 @@ async function FighterDashboard({ userId, name }: { userId: number; name: string
   const profile = await prisma.fighterProfile.findFirst({
     where: { userId },
     include: {
-      athlete: { include: { passport: true, rankings: true } },
+      athlete: {
+        include: { passport: true, rankings: true, fightHistory: true },
+      },
       gym: true,
     },
+  });
+
+  const isApproved = profile?.approvalStatus === "approved";
+  const hasPortrait = !!profile?.athlete.portraitUrl;
+  const injuryAnswered = !!profile?.injuryAnsweredAt;
+  const hasFightHistoryEntry = (profile?.athlete.fightHistory.length ?? 0) > 0;
+
+  const score = completenessScore({
+    approved: isApproved,
+    hasPortrait,
+    injuryAnswered,
+    hasFightHistoryEntry,
+  });
+  const steps = completenessSteps({
+    approved: isApproved,
+    hasPortrait,
+    injuryAnswered,
+    hasFightHistoryEntry,
   });
 
   return (
@@ -327,6 +353,41 @@ async function FighterDashboard({ userId, name }: { userId: number; name: string
               : "No fighter profile linked to your account."}
       </PageHeader>
       <Container className="py-10 space-y-8">
+        {/* Profile completeness */}
+        {profile && isApproved && (
+          <div className="bg-surface border border-border rounded-2xl p-5">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-display text-sm text-gold tracking-wider uppercase">
+                Profile completeness
+              </h3>
+              <span className="font-display text-lg text-white">{score}%</span>
+            </div>
+            <div className="w-full h-2 bg-black/40 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-emerald to-gold transition-all"
+                style={{ width: `${score}%` }}
+              />
+            </div>
+            <ul className="mt-3 grid grid-cols-2 gap-y-1 text-xs">
+              {steps.map((s) => (
+                <li
+                  key={s.label}
+                  className={s.done ? "text-emerald-300" : "text-muted"}
+                >
+                  {s.done ? "✓" : "○"} {s.label}
+                </li>
+              ))}
+            </ul>
+            {score < 100 && (
+              <Link
+                href="/portal/profile"
+                className="inline-block mt-3 text-xs text-gold underline"
+              >
+                Finish your profile →
+              </Link>
+            )}
+          </div>
+        )}
         {profile && (
           <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
             {/* Fighter Card */}
@@ -348,9 +409,11 @@ async function FighterDashboard({ userId, name }: { userId: number; name: string
                 </p>
               )}
               <p className="text-xs text-muted mt-2">
-                {profile.athlete.martialArt || "—"} ·{" "}
-                {profile.athlete.classCode ?? "No class"} ·{" "}
-                {profile.athlete.division}
+                {martialArtName(profile.athlete.martialArt) || "—"}
+                {martialArtRequiresClass(profile.athlete.martialArt) && (
+                  <> · {classDisplayName(profile.athlete.martialArt, profile.athlete.classCode) || "No class"}</>
+                )}
+                {" · "}{divisionDisplayName(profile.athlete.gender, profile.athlete.division) || "—"}
               </p>
               <div className="mt-5 grid grid-cols-3 gap-2 text-center">
                 <div className="bg-black/30 border border-gold/30 rounded-lg py-3">
@@ -416,14 +479,16 @@ async function FighterDashboard({ userId, name }: { userId: number; name: string
                   </dd>
                   <dt className="text-muted">Discipline</dt>
                   <dd className="text-white">
-                    {profile.athlete.martialArt || "—"}
+                    {martialArtName(profile.athlete.martialArt) || "—"}
                   </dd>
                   <dt className="text-muted">Class</dt>
                   <dd className="text-white">
-                    {profile.athlete.classCode ?? "—"}
+                    {martialArtRequiresClass(profile.athlete.martialArt)
+                      ? (classDisplayName(profile.athlete.martialArt, profile.athlete.classCode) || "—")
+                      : "—"}
                   </dd>
                   <dt className="text-muted">Division</dt>
-                  <dd className="text-white">{profile.athlete.division}</dd>
+                  <dd className="text-white">{divisionDisplayName(profile.athlete.gender, profile.athlete.division) || "—"}</dd>
                   <dt className="text-muted">Nationality</dt>
                   <dd className="text-white">{profile.athlete.country || "—"}</dd>
                   <dt className="text-muted">Gym</dt>

@@ -3,15 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { Container } from "@/components/ui/container";
 import { PageHeader } from "@/components/site/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
-
-const CLASS_LABEL: Record<string, string> = {
-  J: "J-Class (U18)",
-  N: "N-Class (≤5 fights)",
-  L: "L-Class (Learning)",
-  C: "C-Class (No shin pads)",
-  B: "B-Class (Debut pro)",
-  A: "A-Class (Seasoned pro)",
-};
+import { martialArtName, classDisplayName, martialArtRequiresClass } from "@/lib/martial-arts";
+import { divisionShortLabel } from "@/lib/divisions";
 
 export const metadata = {
   title: "Fighters",
@@ -46,6 +39,20 @@ export default async function FightersPage() {
                 className="group bg-surface border border-border overflow-hidden"
               >
                 <div className="aspect-[4/5] bg-surface-3 relative overflow-hidden">
+                  {f.portraitUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={f.portraitUrl}
+                      alt={f.name}
+                      className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 grid place-items-center">
+                      <span className="font-display text-7xl text-muted/40">
+                        {f.name[0]?.toUpperCase()}
+                      </span>
+                    </div>
+                  )}
                   <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/40 to-transparent" />
                   <div className="absolute left-4 right-4 bottom-4">
                     <p className="font-display text-[10px] tracking-wider text-gold">
@@ -58,12 +65,16 @@ export default async function FightersPage() {
                 </div>
                 <div className="p-4 flex flex-col gap-1 text-xs text-muted">
                   <span>
-                    <span className="text-white">{f.martialArt || "—"}</span>
-                    {" · "}
-                    {CLASS_LABEL[f.classCode ?? ""] ?? "No class"}
+                    <span className="text-white">{martialArtName(f.martialArt) || "—"}</span>
+                    {martialArtRequiresClass(f.martialArt) && (
+                      <>
+                        {" · "}
+                        {classDisplayName(f.martialArt, f.classCode) || "No class"}
+                      </>
+                    )}
                   </span>
                   <span>
-                    {f.division} · {f.country}
+                    {divisionShortLabel(f.division) || "—"} · {f.country}
                   </span>
                   <span className="text-white font-display tracking-wider mt-1">
                     {f.wins}–{f.losses}–{f.draws}

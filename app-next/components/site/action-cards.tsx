@@ -7,6 +7,7 @@ type Card = {
   description: string;
   cta: string;
   href: string;
+  photo: string;
   photoPos: string;
 };
 
@@ -17,7 +18,8 @@ const CARDS: Card[] = [
       "Register, get your WUCO number and start building your official fight record.",
     cta: "REGISTER NOW",
     href: "/register",
-    photoPos: "60% 30%",
+    photo: "/brand/join-fighter.png",
+    photoPos: "center 30%",
   },
   {
     title: "REGISTER YOUR CLUB",
@@ -25,7 +27,8 @@ const CARDS: Card[] = [
       "Join WUCO Ireland and become part of the national combat sports network.",
     cta: "CLUB REGISTRATION",
     href: "/clubs/join",
-    photoPos: "30% 60%",
+    photo: "/homepage/join-club.png",
+    photoPos: "center 40%",
   },
   {
     title: "BECOME A PROMOTER",
@@ -33,7 +36,8 @@ const CARDS: Card[] = [
       "Work with WUCO to organise sanctioned events and grow Irish combat sports.",
     cta: "PROMOTER APPLICATION",
     href: "/promoters/join",
-    photoPos: "85% 40%",
+    photo: "/homepage/become-promoter.png",
+    photoPos: "center 30%",
   },
   {
     title: "FIGHT RECORDS",
@@ -41,7 +45,8 @@ const CARDS: Card[] = [
       "Explore verified fighter records, competition results and fight history.",
     cta: "SEARCH FIGHTERS",
     href: "/fighters",
-    photoPos: "15% 70%",
+    photo: "/homepage/fight-records.png",
+    photoPos: "center 20%",
   },
 ];
 
@@ -57,7 +62,7 @@ export function ActionCards() {
             >
               <div className="relative h-40 overflow-hidden">
                 <Image
-                  src="/brand/arena.webp"
+                  src={c.photo}
                   alt=""
                   fill
                   sizes="(max-width: 1024px) 50vw, 25vw"

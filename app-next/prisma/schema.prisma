@@ -36,6 +36,10 @@ model PortalUser {
   applicationAudit  ApplicationAudit[]
   invitedEnquiries  GymEnquiry[]          @relation("Invited")
   reviewedEnquiries GymEnquiry[]          @relation("Reviewed")
+  notifications     Notification[]
+  newsPosts         NewsPost[]
+  deletionRequests  AccountDeletionRequest[] @relation("DeletionRequester")
+  verifications     VerificationRequest[]    @relation("VerificationOwner")
 
   @@map("portal_users")
 }
@@ -67,6 +71,11 @@ model Athlete {
   displayOrder Int      @default(0)
   classCode    String?  // 'J' | 'N' | 'L' | 'C' | 'B' | 'A'
   martialArt   String   @default("")
+  gender       String   @default("")   // 'male' | 'female' | ''
+  dateOfBirth  String   @default("")   // ISO yyyy-mm-dd; optional at signup
+  declaredWins   Int    @default(0)
+  declaredLosses Int    @default(0)
+  declaredDraws  Int    @default(0)
 
   profile    FighterProfile?
   passport   FighterPassport?
@@ -76,8 +85,28 @@ model Athlete {
   wonBouts   Bout[]           @relation("Winner")
   entries    EventRegistration[]
   audits     ApplicationAudit[]
+  fightHistory FightHistory[]
+  disciplines AthleteDiscipline[]
 
   @@map("athletes")
+}
+
+// Per-discipline class + declared W-L-D. One row per (athlete, martialArt).
+// The primary row is mirrored onto Athlete.martialArt/classCode/wins/losses/draws
+// so existing read sites keep working unchanged.
+model AthleteDiscipline {
+  id         Int      @id @default(autoincrement())
+  athleteId  Int
+  martialArt String
+  classCode  String?
+  wins       Int      @default(0)
+  losses     Int      @default(0)
+  draws      Int      @default(0)
+  isPrimary  Int      @default(0)
+  athlete    Athlete  @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+
+  @@unique([athleteId, martialArt])
+  @@map("athlete_disciplines")
 }
 
 model FighterProfile {
@@ -91,6 +120,9 @@ model FighterProfile {
   reviewedById    Int?
   reviewedAt      DateTime?
   reviewNote      String   @default("")
+  hasInjuries     Int      @default(0)
+  injuriesDetails String   @default("")
+  injuryAnsweredAt DateTime?
 
   athlete    Athlete     @relation(fields: [athleteId], references: [id], onDelete: Cascade)
   user       PortalUser? @relation("FighterUser", fields: [userId], references: [id])
@@ -284,7 +316,7 @@ model Event {
   registrationOpen     Int      @default(0)
   capacity             Int?
   registrationClosesAt String?
-  categories           String   @default("[\"Featherweight\",\"Lightweight\"]")
+  categories           String   @default("[]")
   promotion            Promotion?         @relation(fields: [promotionId], references: [id])
   registrations        EventRegistration[]
   bouts                Bout[]
@@ -371,4 +403,96 @@ model SiteSetting {
   key   String @id
   value String
   @@map("site_settings")
+}
+
+// ---------------------------------------------------------------------------
+// Notifications (fighter portal)
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  kind      String   // 'new_division_peer' | ...
+  title     String
+  body      String   @default("")
+  link      String   @default("")
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+  user      PortalUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, readAt])
+  @@map("notifications")
+}
+
+// ---------------------------------------------------------------------------
+// Self-declared fight history (fighter can add past bouts after approval)
+// ---------------------------------------------------------------------------
+
+model FightHistory {
+  id          Int      @id @default(autoincrement())
+  athleteId   Int
+  fightDate   String   // yyyy-mm-dd
+  opponent    String
+  eventName   String   @default("")
+  location    String   @default("")
+  result      String   // 'win' | 'loss' | 'draw'
+  method      String   @default("") // KO, Decision, Submission, etc.
+  notes       String   @default("")
+  createdAt   DateTime @default(now())
+  athlete     Athlete  @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  @@index([athleteId, fightDate])
+  @@map("fight_history")
+}
+
+// ---------------------------------------------------------------------------
+// News posts
+// ---------------------------------------------------------------------------
+
+model NewsPost {
+  id          Int      @id @default(autoincrement())
+  slug        String   @unique
+  title       String
+  summary     String   @default("")
+  body        String
+  coverUrl    String   @default("")
+  publishedAt DateTime?
+  authorId    Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  author      PortalUser? @relation(fields: [authorId], references: [id])
+  @@index([publishedAt(sort: Desc)])
+  @@map("news_posts")
+}
+
+// Account deletion requests — user-initiated, admin-processed.
+model AccountDeletionRequest {
+  id            Int      @id @default(autoincrement())
+  userId        Int
+  athleteId     Int?
+  reason        String   @default("")
+  status        String   @default("pending") // 'pending' | 'processed'
+  createdAt     DateTime @default(now())
+  processedAt   DateTime?
+  processedById Int?
+  user          PortalUser @relation("DeletionRequester", fields: [userId], references: [id], onDelete: Cascade)
+  @@index([status, createdAt(sort: Desc)])
+  @@map("account_deletion_requests")
+}
+
+// Verification requests — free-text submissions from fighters that an admin
+// reviews. When verified, the submission is locked and the fighter can post
+// a new one. Visible only to the admin team and the owning user.
+model VerificationRequest {
+  id            Int      @id @default(autoincrement())
+  userId        Int
+  athleteId     Int?
+  body          String
+  status        String   @default("pending") // 'pending' | 'verified' | 'rejected'
+  adminNote     String   @default("")
+  createdAt     DateTime @default(now())
+  verifiedAt    DateTime?
+  verifiedById  Int?
+  user          PortalUser @relation("VerificationOwner", fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+  @@map("verification_requests")
 }

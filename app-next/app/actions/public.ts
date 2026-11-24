@@ -2,9 +2,7 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { sendMail } from "@/lib/mail";
-
-const ADMIN_INBOX = process.env.WUCO_ADMIN_INBOX ?? "ops@wuco.ie";
+import { sendMail, MAIL_ADMIN, buildSubmissionHtml } from "@/lib/mail";
 
 export type FormState = {
   ok: boolean;
@@ -46,7 +44,7 @@ export async function submitGymEnquiry(
     },
   });
   await sendMail({
-    to: ADMIN_INBOX,
+    to: MAIL_ADMIN,
     subject: `New gym enquiry: ${d.gym_name}`,
     body: `${d.contact_name} <${d.contact_email}> submitted an enquiry for ${d.gym_name} (${d.city || "no city"}, ${d.phone || "no phone"}).\n\nMessage:\n${d.message || "—"}`,
     category: "gym_enquiry",
@@ -125,22 +123,120 @@ export async function bookClass(
 
 // -------- FIGHTER REGISTRATION -------------------------------------------
 import { hashPassword } from "@/lib/password";
+import {
+  MARTIAL_ARTS,
+  classesForMartialArt,
+  martialArtRequiresClass,
+  martialArtName,
+  classDisplayName,
+} from "@/lib/martial-arts";
+import { isValidDivision, divisionDisplayName } from "@/lib/divisions";
+import { isValidCountryName } from "@/lib/countries";
 
-const CLASS_CODES = ["J", "N", "L", "C", "B", "A"] as const;
-const registerSchema = z.object({
-  first_name: z.string().min(1).max(120),
-  last_name: z.string().min(1).max(120),
-  email: z.string().email().max(254),
-  password: z.string().min(10).max(128),
-  class_code: z.enum(CLASS_CODES),
-  martial_art: z.string().min(1).max(120),
-  country: z.string().min(1).max(60),
-  // Declared career record. Admin reviews; verified counts come from recorded bouts.
+const MARTIAL_ART_IDS = MARTIAL_ARTS.map((m) => m.id) as [string, ...string[]];
+
+const disciplineRowSchema = z.object({
+  martial_art: z.enum(MARTIAL_ART_IDS),
+  class_code: z.string().max(40).optional().default(""),
   wins: z.coerce.number().int().min(0).max(999).optional().default(0),
   losses: z.coerce.number().int().min(0).max(999).optional().default(0),
   draws: z.coerce.number().int().min(0).max(999).optional().default(0),
-  record_note: z.string().max(2000).optional().default(""),
+  is_primary: z.boolean().optional().default(false),
 });
+
+const disciplinesSchema = z
+  .string()
+  .min(1, "Pick at least one discipline.")
+  .transform((raw, ctx) => {
+    try {
+      const parsed = JSON.parse(raw);
+      return z.array(disciplineRowSchema).min(1).parse(parsed);
+    } catch {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Pick at least one discipline.",
+      });
+      return z.NEVER;
+    }
+  });
+
+const registerSchema = z
+  .object({
+    first_name: z.string().min(1).max(120),
+    last_name: z.string().min(1).max(120),
+    email: z.string().email().max(254),
+    password: z.string().min(10).max(128),
+    gender: z.enum(["male", "female"]),
+    disciplines: disciplinesSchema,
+    // Gender-prefixed division id ("M-57kg", "F-55kg", "MMA-Lightweight").
+    division: z.string().min(1).max(120),
+    country: z.string().min(1).max(60),
+    // Optional ISO yyyy-mm-dd. Admin may use for J-Class eligibility.
+    date_of_birth: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional()
+      .or(z.literal("")),
+    record_note: z.string().max(2000).optional().default(""),
+    // Required acknowledgements from the review step. Checkbox value is "on"
+    // when ticked, missing otherwise — a mismatch makes the whole submit fail.
+    accept_terms: z.literal("on", { message: "You must agree to the Terms & Conditions." }),
+    accept_privacy: z.literal("on", { message: "You must acknowledge the Privacy Policy." }),
+    accept_accuracy: z.literal("on", { message: "You must confirm the information is accurate." }),
+  })
+  .superRefine((data, ctx) => {
+    const seen = new Set<string>();
+    let primaryCount = 0;
+    for (const [i, row] of data.disciplines.entries()) {
+      if (seen.has(row.martial_art)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["disciplines", i, "martial_art"],
+          message: "Duplicate discipline.",
+        });
+      }
+      seen.add(row.martial_art);
+      if (row.is_primary) primaryCount += 1;
+      if (martialArtRequiresClass(row.martial_art)) {
+        const allowed = classesForMartialArt(row.martial_art).map((c) => c.id);
+        if (!row.class_code) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["disciplines", i, "class_code"],
+            message: "Choose a class.",
+          });
+        } else if (!allowed.includes(row.class_code)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["disciplines", i, "class_code"],
+            message: "Not a valid class for this discipline.",
+          });
+        }
+      }
+    }
+    if (primaryCount !== 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["disciplines"],
+        message: "Mark exactly one discipline as primary.",
+      });
+    }
+    const primary = data.disciplines.find((r) => r.is_primary) ?? data.disciplines[0];
+    if (primary && !isValidDivision(data.gender, primary.martial_art, data.division)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["division"],
+        message: "Not a valid weight division for this gender and primary discipline.",
+      });
+    }
+    if (!isValidCountryName(data.country)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["country"],
+        message: "Pick a country from the list.",
+      });
+    }
+  });
 
 export async function registerFighter(
   _prev: FormState,
@@ -162,6 +258,11 @@ export async function registerFighter(
   }
   const { salt, hash } = await hashPassword(d.password);
   const name = `${d.first_name} ${d.last_name}`.trim();
+  const primary = d.disciplines.find((r) => r.is_primary) ?? d.disciplines[0];
+  const primaryWins = primary.wins ?? 0;
+  const primaryLosses = primary.losses ?? 0;
+  const primaryDraws = primary.draws ?? 0;
+  let newAthleteId = 0;
   await prisma.$transaction(async (tx) => {
     const user = await tx.portalUser.create({
       data: { email, name, role: "fighter", salt, passwordHash: hash },
@@ -169,15 +270,32 @@ export async function registerFighter(
     const athlete = await tx.athlete.create({
       data: {
         name,
-        division: "Featherweight",
+        gender: d.gender,
+        division: d.division,
         country: d.country,
-        classCode: d.class_code,
-        martialArt: d.martial_art,
-        wins: d.wins ?? 0,
-        losses: d.losses ?? 0,
-        draws: d.draws ?? 0,
+        classCode: primary.class_code,
+        martialArt: primary.martial_art,
+        dateOfBirth: d.date_of_birth || "",
+        wins: primaryWins,
+        losses: primaryLosses,
+        draws: primaryDraws,
+        declaredWins: primaryWins,
+        declaredLosses: primaryLosses,
+        declaredDraws: primaryDraws,
         isSample: 0,
       },
+    });
+    newAthleteId = athlete.id;
+    await tx.athleteDiscipline.createMany({
+      data: d.disciplines.map((row) => ({
+        athleteId: athlete.id,
+        martialArt: row.martial_art,
+        classCode: row.class_code || null,
+        wins: row.wins ?? 0,
+        losses: row.losses ?? 0,
+        draws: row.draws ?? 0,
+        isPrimary: row.is_primary ? 1 : 0,
+      })),
     });
     await tx.fighterProfile.create({
       data: {
@@ -191,20 +309,54 @@ export async function registerFighter(
           : "",
       },
     });
+    const auditLines = d.disciplines
+      .map(
+        (r) =>
+          `${martialArtName(r.martial_art)}${r.is_primary ? " (primary)" : ""}: ${r.wins ?? 0}-${r.losses ?? 0}-${r.draws ?? 0}`,
+      )
+      .join("; ");
     await tx.applicationAudit.create({
       data: {
         athleteId: athlete.id,
         actorId: user.id,
         action: "submitted",
-        note: `Declared record ${d.wins ?? 0}-${d.losses ?? 0}-${d.draws ?? 0}. ${d.record_note ?? ""}`.trim(),
+        note: `Declared records → ${auditLines}. ${d.record_note ?? ""}`.trim(),
       },
     });
   });
+  void newAthleteId;
+  const divisionName = divisionDisplayName(d.gender, d.division);
+  const disciplineLines = d.disciplines
+    .map((r) => {
+      const art = martialArtName(r.martial_art);
+      const cls = r.class_code ? ` (${classDisplayName(r.martial_art, r.class_code)})` : "";
+      const rec = `${r.wins ?? 0}-${r.losses ?? 0}-${r.draws ?? 0}`;
+      const tag = r.is_primary ? " [PRIMARY]" : "";
+      return `  • ${art}${cls}: ${rec}${tag}`;
+    })
+    .join("\n");
+
   await sendMail({
-    to: ADMIN_INBOX,
+    to: MAIL_ADMIN,
     subject: `New fighter signup: ${name}`,
-    body: `${name} <${email}> has registered.\nClass: ${d.class_code}\nDiscipline: ${d.martial_art}\nDeclared record: ${d.wins ?? 0}-${d.losses ?? 0}-${d.draws ?? 0}${d.record_note ? `\nRecord notes: ${d.record_note}` : ""}\n\nReview in the admin portal.`,
+    body: `${name} <${email}> has registered.\nDivision: ${divisionName}\nDisciplines:\n${disciplineLines}${d.record_note ? `\nRecord notes: ${d.record_note}` : ""}\n\nReview in the admin portal.`,
     category: "fighter_signup",
+  });
+  await sendMail({
+    to: email,
+    subject: "W.U.C.O: your fighter application was received",
+    body: `Hi ${name},\n\nThanks — your W.U.C.O fighter application is in.\n\nDivision: ${divisionName}\nDisciplines:\n${disciplineLines}\n\nA W.U.C.O admin will review your application and get back to you by email.\n\n— W.U.C.O Ireland`,
+    html: buildSubmissionHtml({
+      name,
+      division: divisionName,
+      disciplines: d.disciplines.map((r) => ({
+        name: martialArtName(r.martial_art),
+        className: r.class_code ? classDisplayName(r.martial_art, r.class_code) : "—",
+        record: `${r.wins ?? 0}-${r.losses ?? 0}-${r.draws ?? 0}`,
+        isPrimary: !!r.is_primary,
+      })),
+    }),
+    category: "fighter_submitted",
   });
   return {
     ok: true,

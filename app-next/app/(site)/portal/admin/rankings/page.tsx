@@ -6,6 +6,7 @@ import { Container } from "@/components/ui/container";
 import { PageHeader } from "@/components/site/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { setRanking } from "@/app/actions/admin-editor";
+import { ALL_DIVISIONS, divisionDisplayName } from "@/lib/divisions";
 
 export const metadata = { title: "Admin · Rankings" };
 
@@ -30,7 +31,10 @@ export default async function AdminRankingsPage() {
   ]);
 
   const divisions = Array.from(
-    new Set([...rankings.map((r) => r.division), "Featherweight", "Lightweight"]),
+    new Set([
+      ...rankings.map((r) => r.division),
+      ...ALL_DIVISIONS.map((d) => d.id),
+    ]),
   );
 
   return (
@@ -55,7 +59,7 @@ export default async function AdminRankingsPage() {
               className="bg-surface border border-border p-5"
             >
               <h2 className="font-display text-xl text-white tracking-wider mb-4">
-                {division}
+                {divisionDisplayName(null, division)}
               </h2>
               {list.length === 0 ? (
                 <p className="text-sm text-muted mb-4">

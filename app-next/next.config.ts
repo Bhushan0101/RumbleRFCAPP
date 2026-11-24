@@ -17,6 +17,8 @@ const nextConfig: NextConfig = {
         "wucoireland.ie",
         "www.wucoireland.ie",
       ],
+      // Fighter profile photos can be up to 5 MB.
+      bodySizeLimit: "5mb",
     },
   },
   turbopack: {

@@ -6,7 +6,7 @@ export function Hero() {
   return (
     <section className="relative overflow-hidden bg-[#07251b]">
       <Image
-        src="/brand/arena.webp"
+        src="/brand/hero.png"
         alt=""
         fill
         priority

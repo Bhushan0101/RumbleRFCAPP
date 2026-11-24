@@ -205,6 +205,35 @@ function SupportDialog({
               className="w-full px-4 py-2.5 bg-white border border-neutral-300 rounded-lg text-[#07251b] focus:border-emerald outline-none"
             />
           </label>
+          <fieldset>
+            <legend className="font-display text-[11px] tracking-wider text-neutral-600 uppercase block mb-1.5">
+              Priority
+            </legend>
+            <div className="grid grid-cols-4 gap-2">
+              {(
+                [
+                  { v: "low", label: "Low", colour: "border-neutral-300 text-neutral-600" },
+                  { v: "normal", label: "Normal", colour: "border-emerald/40 text-emerald" },
+                  { v: "high", label: "High", colour: "border-gold text-gold-ink" },
+                  { v: "urgent", label: "Urgent", colour: "border-red-400 text-red-600" },
+                ] as const
+              ).map((p) => (
+                <label
+                  key={p.v}
+                  className={`flex items-center justify-center gap-1.5 px-3 py-2 border rounded-lg cursor-pointer text-xs font-display tracking-wider uppercase has-[input:checked]:ring-2 has-[input:checked]:ring-offset-1 has-[input:checked]:ring-emerald bg-white ${p.colour}`}
+                >
+                  <input
+                    type="radio"
+                    name="priority"
+                    value={p.v}
+                    defaultChecked={p.v === "normal"}
+                    className="sr-only"
+                  />
+                  {p.label}
+                </label>
+              ))}
+            </div>
+          </fieldset>
           <label className="block">
             <span className="font-display text-[11px] tracking-wider text-neutral-600 uppercase block mb-1.5">
               Message

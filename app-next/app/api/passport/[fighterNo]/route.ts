@@ -19,6 +19,7 @@ export async function GET(
       athlete: {
         include: {
           profile: { include: { gym: true } },
+          disciplines: true,
         },
       },
     },
@@ -36,6 +37,16 @@ export async function GET(
     class_code: row.athlete.classCode,
     martial_art: row.athlete.martialArt,
     record: `${row.athlete.wins}-${row.athlete.losses}-${row.athlete.draws}`,
+    disciplines: [...row.athlete.disciplines]
+      .sort((a, b) => b.isPrimary - a.isPrimary)
+      .map((d) => ({
+        martial_art: d.martialArt,
+        class_code: d.classCode,
+        wins: d.wins,
+        losses: d.losses,
+        draws: d.draws,
+        is_primary: d.isPrimary === 1,
+      })),
     status: status === "approved" ? "Active" : "Suspended",
     nationality: row.athlete.country || "Ireland",
     club: row.athlete.profile?.gym?.name ?? "Independent",

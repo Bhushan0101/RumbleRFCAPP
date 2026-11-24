@@ -3,9 +3,7 @@
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { sendMail } from "@/lib/mail";
-
-const ADMIN_INBOX = process.env.WUCO_ADMIN_INBOX ?? "ops@wuco.ie";
+import { sendMail, MAIL_INFO } from "@/lib/mail";
 
 const correctionSchema = z.object({
   details: z.string().min(10).max(4000),
@@ -47,7 +45,7 @@ export async function submitCorrectionRequest(
     parsed.data.details,
   ];
   await sendMail({
-    to: ADMIN_INBOX,
+    to: MAIL_INFO,
     subject,
     body: bodyParts.join("\n"),
     // Re-uses existing enum. We'll surface this in the admin inbox verbatim.

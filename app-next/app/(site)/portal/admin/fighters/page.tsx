@@ -6,28 +6,13 @@ import { Container } from "@/components/ui/container";
 import { PageHeader } from "@/components/site/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ReviewForm } from "@/components/forms/review-form";
+import { DeleteFighterButton } from "@/components/forms/delete-fighter-button";
+import { AdminMartialArtClassFields } from "@/components/forms/admin-martial-art-class-fields";
 import { updateFighter } from "@/app/actions/admin-editor";
+import { martialArtName, classDisplayName, martialArtRequiresClass } from "@/lib/martial-arts";
+import { divisionDisplayName, genderName } from "@/lib/divisions";
 
 export const metadata = { title: "Admin · Fighters" };
-
-const CLASS_LABEL: Record<string, string> = {
-  J: "J-Class (U18)",
-  N: "N-Class (≤5 fights)",
-  L: "L-Class (Learning)",
-  C: "C-Class (No shin pads)",
-  B: "B-Class (Debut pro)",
-  A: "A-Class (Seasoned pro)",
-};
-
-const CLASS_OPTS = [
-  { v: "", label: "No class" },
-  { v: "J", label: "J-Class (U18)" },
-  { v: "N", label: "N-Class (≤5 fights)" },
-  { v: "L", label: "L-Class (Learning)" },
-  { v: "C", label: "C-Class (No shin pads)" },
-  { v: "B", label: "B-Class (Debut pro)" },
-  { v: "A", label: "A-Class (Seasoned pro)" },
-];
 
 export default async function AdminFightersPage({
   searchParams,
@@ -45,7 +30,10 @@ export default async function AdminFightersPage({
 
   const applications = await prisma.fighterProfile.findMany({
     where,
-    include: { athlete: { include: { passport: true } }, user: true },
+    include: {
+      athlete: { include: { passport: true, disciplines: true } },
+      user: true,
+    },
     orderBy: [{ approvalStatus: "asc" }, { athlete: { name: "asc" } }],
   });
 
@@ -121,9 +109,12 @@ export default async function AdminFightersPage({
                     </h3>
                     <p className="text-xs text-muted mt-1">
                       {a.user?.email ?? "Guest application"} ·{" "}
-                      {a.athlete.martialArt || "—"} ·{" "}
-                      {CLASS_LABEL[a.athlete.classCode ?? ""] ?? "No class"} ·{" "}
-                      {a.athlete.division} ·{" "}
+                      {genderName(a.athlete.gender) || "—"} ·{" "}
+                      {martialArtName(a.athlete.martialArt) || "—"} ·{" "}
+                      {martialArtRequiresClass(a.athlete.martialArt)
+                        ? (classDisplayName(a.athlete.martialArt, a.athlete.classCode) || "No class")
+                        : "—"} ·{" "}
+                      {divisionDisplayName(a.athlete.gender, a.athlete.division) || "—"} ·{" "}
                       <span className="text-white font-display">
                         {a.athlete.wins}–{a.athlete.losses}–{a.athlete.draws}
                       </span>
@@ -148,6 +139,12 @@ export default async function AdminFightersPage({
                       athleteId={a.athleteId}
                       currentStatus={a.approvalStatus}
                     />
+                    <div className="mt-4 pt-4 border-t border-border">
+                      <DeleteFighterButton
+                        athleteId={a.athleteId}
+                        fighterName={a.athlete.name}
+                      />
+                    </div>
                   </div>
 
                   {/* Full edit form */}
@@ -170,58 +167,24 @@ export default async function AdminFightersPage({
                         />
                       </Row>
                       <Row>
-                        <F
-                          label="Martial art"
-                          name="martial_art"
-                          def={a.athlete.martialArt}
+                        <AdminMartialArtClassFields
+                          initialGender={a.athlete.gender ?? ""}
+                          initialDivision={a.athlete.division ?? ""}
+                          initialDisciplines={a.athlete.disciplines.map((d) => ({
+                            martialArt: d.martialArt,
+                            classCode: d.classCode,
+                            wins: d.wins,
+                            losses: d.losses,
+                            draws: d.draws,
+                            isPrimary: d.isPrimary,
+                          }))}
                         />
-                        <label className="block">
-                          <span className="font-display text-[10px] tracking-wider text-gold uppercase">
-                            Class
-                          </span>
-                          <select
-                            name="class_code"
-                            defaultValue={a.athlete.classCode ?? ""}
-                            className="w-full mt-1 px-3 py-2 bg-bg border border-border text-white text-sm"
-                          >
-                            {CLASS_OPTS.map((c) => (
-                              <option key={c.v} value={c.v}>
-                                {c.label}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
                       </Row>
                       <Row>
-                        <F
-                          label="Division"
-                          name="division"
-                          def={a.athlete.division}
-                        />
                         <F
                           label="Country"
                           name="country"
                           def={a.athlete.country}
-                        />
-                      </Row>
-                      <Row>
-                        <F
-                          label="Wins"
-                          name="wins"
-                          type="number"
-                          def={String(a.athlete.wins)}
-                        />
-                        <F
-                          label="Losses"
-                          name="losses"
-                          type="number"
-                          def={String(a.athlete.losses)}
-                        />
-                        <F
-                          label="Draws"
-                          name="draws"
-                          type="number"
-                          def={String(a.athlete.draws)}
                         />
                       </Row>
                       <label className="block">

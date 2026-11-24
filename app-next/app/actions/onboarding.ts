@@ -2,10 +2,8 @@
 
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { sendMail } from "@/lib/mail";
+import { sendMail, MAIL_ADMIN } from "@/lib/mail";
 import type { FormState } from "./public";
-
-const ADMIN_INBOX = process.env.WUCO_ADMIN_INBOX ?? "ops@wuco.ie";
 
 function slugify(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60) || "gym";
@@ -68,7 +66,7 @@ export async function submitOnboarding(
     }),
   ]);
   await sendMail({
-    to: ADMIN_INBOX,
+    to: MAIL_ADMIN,
     subject: `Gym onboarding submitted: ${d.name}`,
     body: `${tokenRow.enquiry.contactName} <${tokenRow.enquiry.contactEmail}> submitted the onboarding form for ${d.name}. Review it in the admin portal.`,
     category: "gym_submitted",

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Search, User, ChevronDown, Menu, X } from "lucide-react";
+import { Search, User, ChevronDown, Menu, X, Bell } from "lucide-react";
 import { BrandLockup } from "./brand-lockup";
 import { Container } from "@/components/ui/container";
 import { NAV } from "./nav-data";
@@ -15,9 +15,10 @@ type Props = {
     email: string | null;
     role: string | undefined;
   } | null;
+  unreadNotifications?: number;
 };
 
-export function SiteHeaderClient({ user }: Props) {
+export function SiteHeaderClient({ user, unreadNotifications = 0 }: Props) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [mobileExpanded, setMobileExpanded] = React.useState<string | null>(null);
 
@@ -82,6 +83,24 @@ export function SiteHeaderClient({ user }: Props) {
             >
               <Search className="size-4" />
             </button>
+            {user && (
+              <Link
+                href="/portal/notifications"
+                aria-label={
+                  unreadNotifications > 0
+                    ? `Notifications — ${unreadNotifications} unread`
+                    : "Notifications"
+                }
+                className="relative hidden sm:grid place-items-center size-10 border border-black/10 bg-white/60 text-[#07251b] hover:border-emerald hover:text-emerald rounded-full transition-colors"
+              >
+                <Bell className="size-4" />
+                {unreadNotifications > 0 && (
+                  <span className="absolute -top-1 -right-1 inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[10px] font-bold px-1">
+                    {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                  </span>
+                )}
+              </Link>
+            )}
             {user ? (
               <UserMenu name={user.name} email={user.email} role={user.role} />
             ) : (
