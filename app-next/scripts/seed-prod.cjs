@@ -13,8 +13,10 @@ const { pbkdf2Sync, randomBytes } = require("node:crypto");
 const prisma = new PrismaClient();
 
 function hashPassword(password) {
+  // MUST match lib/password.ts ITERATIONS. Diverging values here produce
+  // hashes the runtime verifyPassword will reject.
   const salt = randomBytes(16).toString("hex");
-  const hash = pbkdf2Sync(password, Buffer.from(salt, "hex"), 200_000, 32, "sha256").toString("hex");
+  const hash = pbkdf2Sync(password, Buffer.from(salt, "hex"), 100_000, 32, "sha256").toString("hex");
   return { salt, hash };
 }
 
