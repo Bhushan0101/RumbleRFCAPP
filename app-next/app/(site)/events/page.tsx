@@ -44,7 +44,9 @@ export default async function EventsPage() {
                     <div className="h-40 bg-emerald/40 relative overflow-hidden">
                       <div
                         className="absolute inset-0 bg-cover bg-center"
-                        style={{ backgroundImage: `url(/brand/arena.webp)` }}
+                        style={{
+                          backgroundImage: `url(${e.posterUrl ?? "/brand/arena.webp"})`,
+                        }}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/30 to-transparent" />
                       <div className="absolute left-4 top-4 bg-emerald text-white w-16 text-center py-2 rounded-lg">

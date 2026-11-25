@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/site/page-header";
 import { FighterProfileForm } from "@/components/forms/fighter-profile-form";
 import { RequestCorrectionButton } from "@/components/forms/request-correction-button";
 import { PortraitForm } from "@/components/forms/portrait-form";
+import { FighterGalleryForm } from "@/components/forms/fighter-gallery-form";
 import { InjuriesForm } from "@/components/forms/injuries-form";
 import { VerificationRequestsPanel } from "@/components/forms/verification-requests-panel";
 import { DeleteAccountCard } from "@/components/forms/delete-account-card";
@@ -29,6 +30,7 @@ export default async function MyProfilePage() {
           passport: true,
           disciplines: true,
           fightHistory: { orderBy: { fightDate: "desc" } },
+          photos: { orderBy: { createdAt: "desc" } },
         },
       },
       user: {
@@ -228,6 +230,9 @@ export default async function MyProfilePage() {
                 initialNickname={profile.athlete.nickname ?? ""}
                 initialCountry={profile.athlete.country ?? ""}
                 initialBio={profile.athlete.biography ?? ""}
+                initialInstagram={profile.athlete.instagramHandle ?? ""}
+                initialFacebook={profile.athlete.facebookUrl ?? ""}
+                initialTiktok={profile.athlete.tiktokHandle ?? ""}
               />
             </section>
 
@@ -242,6 +247,23 @@ export default async function MyProfilePage() {
                     passport and public pages.
                   </p>
                   <PortraitForm initialUrl={profile.athlete.portraitUrl ?? ""} />
+                </section>
+
+                <section className="bg-surface border border-border rounded-2xl p-6">
+                  <h2 className="font-display text-2xl text-white tracking-wider mb-2">
+                    Photo gallery
+                  </h2>
+                  <p className="text-xs text-muted mb-5">
+                    Share training, event or weigh-in photos. These appear on
+                    your public fighter profile.
+                  </p>
+                  <FighterGalleryForm
+                    initialPhotos={profile.athlete.photos.map((p) => ({
+                      id: p.id,
+                      url: p.url,
+                      caption: p.caption,
+                    }))}
+                  />
                 </section>
 
                 <section className="bg-surface border border-border rounded-2xl p-6">

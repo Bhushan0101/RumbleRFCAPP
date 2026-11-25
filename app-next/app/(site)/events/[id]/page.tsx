@@ -1,8 +1,11 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
 import { Container } from "@/components/ui/container";
 import { PageHeader } from "@/components/site/page-header";
 import Link from "next/link";
+import { EventInterestBlock } from "@/components/site/event-interest-block";
+import { LiveEventAutoRefresh } from "@/components/site/live-event-auto-refresh";
 
 type Params = Promise<{ id: string }>;
 
@@ -14,31 +17,101 @@ export async function generateMetadata({ params }: { params: Params }) {
 
 export default async function EventPage({ params }: { params: Params }) {
   const { id } = await params;
-  const e = await prisma.event.findUnique({
-    where: { id: Number(id) },
-    include: {
-      promotion: true,
-      registrations: true,
-      bouts: {
-        include: {
-          red: { include: { passport: true } },
-          blue: { include: { passport: true } },
-          result: true,
+  const [session, e] = await Promise.all([
+    auth(),
+    prisma.event.findUnique({
+      where: { id: Number(id) },
+      include: {
+        promotion: true,
+        registrations: true,
+        bouts: {
+          include: {
+            red: { include: { passport: true } },
+            blue: { include: { passport: true } },
+            result: true,
+          },
+          orderBy: { boutOrder: "asc" },
         },
-        orderBy: { boutOrder: "asc" },
       },
-    },
-  });
+    }),
+  ]);
   if (!e) notFound();
   const isLive = e.status === "Live";
+  const isPast = e.status === "Past";
+
+  // Viewer's own registration for this event (if they're a signed-in fighter).
+  let viewerRegistration: {
+    status: string;
+    offerOpponent: string;
+    offerDivision: string;
+    offerSection: string;
+    offerNote: string;
+  } | null = null;
+  if (session?.user?.id) {
+    const profile = await prisma.fighterProfile.findFirst({
+      where: { userId: Number(session.user.id) },
+      select: { athleteId: true, approvalStatus: true },
+    });
+    if (profile) {
+      const reg = await prisma.eventRegistration.findUnique({
+        where: {
+          eventId_athleteId: { eventId: e.id, athleteId: profile.athleteId },
+        },
+        select: {
+          status: true,
+          offerOpponent: true,
+          offerDivision: true,
+          offerSection: true,
+          offerNote: true,
+        },
+      });
+      viewerRegistration = reg;
+      if (!viewerRegistration && profile.approvalStatus === "approved" && !isPast) {
+        // Approved fighter without a row — show the register-interest card.
+        viewerRegistration = {
+          status: "none",
+          offerOpponent: "",
+          offerDivision: "",
+          offerSection: "",
+          offerNote: "",
+        };
+      }
+    }
+  }
 
   return (
     <>
+      {isLive && <LiveEventAutoRefresh seconds={10} />}
+      {e.posterUrl && (
+        <div className="relative w-full aspect-[21/9] max-h-[480px] overflow-hidden">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={e.posterUrl}
+            alt={e.title}
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/30 to-transparent" />
+        </div>
+      )}
       <PageHeader eyebrow={e.subtitle ?? "W.U.C.O event"} title={e.title}>
         {e.description || "Event details to be announced."}
       </PageHeader>
       <Container className="py-10 grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
-        <section className="bg-surface border border-border rounded-2xl p-6">
+        <div className="space-y-6">
+          {viewerRegistration && (
+            <EventInterestBlock
+              eventId={e.id}
+              status={viewerRegistration.status}
+              offer={{
+                opponent: viewerRegistration.offerOpponent,
+                division: viewerRegistration.offerDivision,
+                section: viewerRegistration.offerSection,
+                note: viewerRegistration.offerNote,
+              }}
+              eventPast={isPast}
+            />
+          )}
+          <section className="bg-surface border border-border rounded-2xl p-6">
           <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
             <h2 className="font-display text-2xl text-white tracking-wider">
               Fight card
@@ -112,6 +185,7 @@ export default async function EventPage({ params }: { params: Params }) {
             </ul>
           )}
         </section>
+        </div>
         <aside className="bg-surface border border-border rounded-2xl p-6 space-y-3 text-sm">
           <div>
             <p className="font-display text-[10px] tracking-wider text-gold uppercase">

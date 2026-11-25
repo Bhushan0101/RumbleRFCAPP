@@ -170,13 +170,30 @@ const rankingSchema = z.object({
   athlete_id: z.coerce.number().int().positive(),
   division: z.string().min(1).max(120),
   position: z.coerce.number().int().min(0).max(999),
+  return_to: z.string().max(400).optional().default(""),
 });
 
 export async function setRanking(formData: FormData) {
   await requireRankingAccess();
   const parsed = rankingSchema.parse(Object.fromEntries(formData));
+
+  // Capture the prior position (if any) so we only email on new or changed
+  // assignments — not on a no-op save.
+  const prior = await prisma.ranking.findUnique({
+    where: {
+      athleteId_division: {
+        athleteId: parsed.athlete_id,
+        division: parsed.division,
+      },
+    },
+  });
+
+  // Fighters evicted by this change — their position is vacated so no two
+  // athletes share a rank.
+  const vacatedNames: string[] = [];
+
   if (parsed.position === 0) {
-    // Remove from division.
+    // Explicit removal from the division.
     await prisma.ranking.deleteMany({
       where: {
         athleteId: parsed.athlete_id,
@@ -184,6 +201,21 @@ export async function setRanking(formData: FormData) {
       },
     });
   } else {
+    // If someone else currently holds the target position, vacate them first
+    // so we never end up with two fighters on the same rank.
+    const conflict = await prisma.ranking.findFirst({
+      where: {
+        division: parsed.division,
+        position: parsed.position,
+        athleteId: { not: parsed.athlete_id },
+      },
+      include: { athlete: true },
+    });
+    if (conflict) {
+      await prisma.ranking.delete({ where: { id: conflict.id } });
+      vacatedNames.push(conflict.athlete.name);
+    }
+
     await prisma.ranking.upsert({
       where: {
         athleteId_division: {
@@ -199,23 +231,94 @@ export async function setRanking(formData: FormData) {
       },
     });
   }
-  // Compact positions (keep them 1..n with no gaps).
-  const all = await prisma.ranking.findMany({
-    where: { division: parsed.division },
-    orderBy: { position: "asc" },
-  });
-  await prisma.$transaction(
-    all.map((r, i) =>
-      prisma.ranking.update({
-        where: { id: r.id },
-        data: { position: i + 1 },
-      }),
-    ),
-  );
+
+  // DO NOT compact positions — the admin wants intentional gaps when a
+  // fighter is bumped out. Blank slots are surfaced via the vacated banner
+  // and the admin re-fills them explicitly.
+
+  // Notify the fighter whenever their position changes to a non-zero rank.
+  if (parsed.position > 0 && prior?.position !== parsed.position) {
+    const finalRow = await prisma.ranking.findUnique({
+      where: {
+        athleteId_division: {
+          athleteId: parsed.athlete_id,
+          division: parsed.division,
+        },
+      },
+    });
+    if (finalRow) {
+      const athlete = await prisma.athlete.findUnique({
+        where: { id: parsed.athlete_id },
+        include: {
+          passport: true,
+          profile: { include: { user: true } },
+        },
+      });
+      if (athlete?.profile?.user?.email) {
+        const { sendMail, SITE_URL } = await import("@/lib/mail");
+        const { divisionDisplayName } = await import("@/lib/divisions");
+        const fighterNo = athlete.passport?.fighterNo;
+        const divisionName =
+          divisionDisplayName(athlete.gender, parsed.division) || parsed.division;
+        const passportLine = fighterNo
+          ? `\nYour passport (now showing your ranking): ${SITE_URL}/passport/${fighterNo}\n`
+          : "";
+        const action = prior ? "updated" : "allotted";
+        await sendMail({
+          to: athlete.profile.user.email,
+          subject: `W.U.C.O: your ranking has been ${action}`,
+          body:
+            `Hi ${athlete.name},\n\n` +
+            `Your official W.U.C.O ranking has been ${action}.\n\n` +
+            `Division: ${divisionName}\n` +
+            `Position: #${finalRow.position}\n` +
+            passportLine +
+            `\n— W.U.C.O Ireland`,
+          category: "fighter_ranked",
+        });
+      }
+    }
+  }
+
+  // Notify anyone evicted by this change — they need to know their previous
+  // position is now vacant.
+  for (const name of vacatedNames) {
+    const evicted = await prisma.athlete.findFirst({
+      where: { name },
+      include: { profile: { include: { user: true } } },
+    });
+    if (evicted?.profile?.user?.email) {
+      const { sendMail } = await import("@/lib/mail");
+      const { divisionDisplayName } = await import("@/lib/divisions");
+      const divisionName =
+        divisionDisplayName(evicted.gender, parsed.division) || parsed.division;
+      await sendMail({
+        to: evicted.profile.user.email,
+        subject: "W.U.C.O: your ranking has been vacated",
+        body:
+          `Hi ${evicted.name},\n\n` +
+          `A W.U.C.O admin has reassigned your previous position in ${divisionName}. ` +
+          `You are currently unranked in this division while the admin reviews the standings. ` +
+          `We'll email you again when a position is allotted.\n\n— W.U.C.O Ireland`,
+        category: "fighter_ranked",
+      });
+    }
+  }
+
   revalidatePath("/portal/admin/rankings");
   revalidatePath("/portal/ranking/rankings");
   revalidatePath("/rankings");
   revalidatePath("/");
+
+  // Preserve the filtered admin view and surface vacancies in a banner.
+  if (parsed.return_to) {
+    const sep = parsed.return_to.includes("?") ? "&" : "?";
+    const suffix = vacatedNames.length
+      ? `${sep}vacated=${encodeURIComponent(vacatedNames.join(", "))}`
+      : "";
+    const { redirect } = await import("next/navigation");
+    redirect(`${parsed.return_to}${suffix}`);
+  }
 }
 
 // -------- Events ---------------------------------------------------------
@@ -228,11 +331,33 @@ const eventSchema = z.object({
   city: z.string().max(120).optional().default(""),
   description: z.string().max(4000).optional().default(""),
   status: z.enum(["Upcoming", "Live", "Past"]).default("Upcoming"),
+  // Optional "clear this" flag for the cover photo — set to "1" when the
+  // admin ticks the "remove cover" checkbox.
+  remove_poster: z.string().optional().default(""),
 });
+
+const ALLOWED_POSTER_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const MAX_POSTER_BYTES = 5 * 1024 * 1024; // 5 MB
 
 export async function saveEvent(formData: FormData) {
   await requireAdmin();
-  const parsed = eventSchema.parse(Object.fromEntries(formData));
+  // Pull the file side-channel first, then strip it before the zod parse
+  // (zod + Object.fromEntries would swallow File values anyway).
+  const posterFile = formData.get("poster");
+  const entries = Object.fromEntries(formData);
+  delete (entries as Record<string, unknown>).poster;
+  const parsed = eventSchema.parse(entries);
+
+  // Handle the poster upload — writes to public/uploads/events/.
+  // We need the event id before writing the file (so the filename is stable);
+  // on create we run the DB write first, then the upload, then persist the URL.
+  let posterUrl: string | null | undefined; // undefined = don't touch
+  if (parsed.remove_poster === "1") {
+    posterUrl = null;
+  }
+
+  let eventId = parsed.id ?? 0;
+
   if (parsed.id) {
     await prisma.event.update({
       where: { id: parsed.id },
@@ -244,10 +369,11 @@ export async function saveEvent(formData: FormData) {
         city: parsed.city,
         description: parsed.description,
         status: parsed.status,
+        ...(posterUrl === null ? { posterUrl: null } : {}),
       },
     });
   } else {
-    await prisma.event.create({
+    const created = await prisma.event.create({
       data: {
         title: parsed.title,
         subtitle: parsed.subtitle,
@@ -258,9 +384,41 @@ export async function saveEvent(formData: FormData) {
         status: parsed.status,
       },
     });
+    eventId = created.id;
   }
+
+  if (posterFile instanceof File && posterFile.size > 0) {
+    if (!ALLOWED_POSTER_TYPES.includes(posterFile.type)) {
+      throw new Error("Cover photo must be JPG, PNG, WEBP or GIF.");
+    }
+    if (posterFile.size > MAX_POSTER_BYTES) {
+      throw new Error("Cover photo is larger than 5 MB.");
+    }
+    const ext =
+      posterFile.type === "image/png"
+        ? "png"
+        : posterFile.type === "image/webp"
+          ? "webp"
+          : posterFile.type === "image/gif"
+            ? "gif"
+            : "jpg";
+    const name = `${eventId}-${Date.now()}.${ext}`;
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    const dir = join(process.cwd(), "public", "uploads", "events");
+    await mkdir(dir, { recursive: true });
+    const buf = Buffer.from(await posterFile.arrayBuffer());
+    await writeFile(join(dir, name), buf);
+    posterUrl = `/uploads/events/${name}`;
+    await prisma.event.update({
+      where: { id: eventId },
+      data: { posterUrl },
+    });
+  }
+
   revalidatePath("/portal/admin/events");
   revalidatePath("/events");
+  revalidatePath(`/events/${eventId}`);
   revalidatePath("/");
 }
 
@@ -281,7 +439,11 @@ const boutResultSchema = z.object({
   blue_id: z.coerce.number().int().positive(),
   outcome: z.enum(["red", "blue", "draw"]),
   method: z.string().max(60).optional().default(""),
-  round: z.coerce.number().int().min(1).max(20).optional(),
+  round: z
+    .preprocess(
+      (v) => (v === "" || v == null ? undefined : Number(v)),
+      z.number().int().min(1).max(20).optional(),
+    ),
   time: z.string().max(10).optional().default(""),
 });
 
@@ -327,5 +489,66 @@ export async function recordBoutResult(formData: FormData) {
     }
   });
   revalidatePath("/portal/admin/events");
+  revalidatePath(`/events/${d.event_id}`);
+  revalidatePath("/events");
+  revalidatePath(`/fighters/${d.red_id}`);
+  revalidatePath(`/fighters/${d.blue_id}`);
+  revalidatePath("/fighters");
+  revalidatePath("/rankings");
   revalidatePath("/");
+}
+
+// -------- Bout (scheduling, no result yet) -------------------------------
+const addBoutSchema = z.object({
+  event_id: z.coerce.number().int().positive(),
+  red_id: z.coerce.number().int().positive(),
+  blue_id: z.coerce.number().int().positive(),
+  bout_order: z.preprocess(
+    (v) => (v === "" || v == null ? 1 : Number(v)),
+    z.number().int().min(1).max(999),
+  ),
+  card_section: z.string().max(40).optional().default("Main"),
+  division: z.string().max(120).optional().default(""),
+});
+
+export async function addBout(formData: FormData) {
+  await requireAdmin();
+  const d = addBoutSchema.parse(Object.fromEntries(formData));
+  if (d.red_id === d.blue_id) throw new Error("A fighter can't face themselves.");
+  await prisma.bout.create({
+    data: {
+      eventId: d.event_id,
+      redAthleteId: d.red_id,
+      blueAthleteId: d.blue_id,
+      boutOrder: d.bout_order,
+      cardSection: d.card_section || "Main",
+      division: d.division || null,
+    },
+  });
+  revalidatePath("/portal/admin/events");
+  revalidatePath(`/events/${d.event_id}`);
+  revalidatePath("/events");
+  revalidatePath("/");
+}
+
+export async function deleteBout(formData: FormData) {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  if (!id) return;
+  // If a result was already recorded we DO NOT want to silently rewind athlete
+  // records — refuse the delete so the admin reverses the result explicitly.
+  const bout = await prisma.bout.findUnique({
+    where: { id },
+    include: { result: true, event: true },
+  });
+  if (!bout) return;
+  if (bout.result) {
+    throw new Error("Can't delete a bout with a recorded result. Clear the result first.");
+  }
+  await prisma.bout.delete({ where: { id } });
+  revalidatePath("/portal/admin/events");
+  if (bout.eventId) {
+    revalidatePath(`/events/${bout.eventId}`);
+  }
+  revalidatePath("/events");
 }

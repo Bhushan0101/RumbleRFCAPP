@@ -9,7 +9,11 @@ import {
   saveEvent,
   deleteEvent,
   recordBoutResult,
+  addBout,
+  deleteBout,
 } from "@/app/actions/admin-editor";
+import { offerBout } from "@/app/actions/event-flow";
+import { ALL_DIVISIONS, divisionDisplayName } from "@/lib/divisions";
 
 export const metadata = { title: "Admin · Events & bouts" };
 
@@ -22,6 +26,18 @@ export default async function AdminEventsPage() {
       orderBy: { startsAt: "desc" },
       include: {
         _count: { select: { bouts: true, registrations: true } },
+        bouts: {
+          include: {
+            red: true,
+            blue: true,
+            result: true,
+          },
+          orderBy: { boutOrder: "asc" },
+        },
+        registrations: {
+          include: { athlete: true },
+          orderBy: { createdAt: "asc" },
+        },
       },
     }),
     prisma.athlete.findMany({
@@ -33,8 +49,8 @@ export default async function AdminEventsPage() {
   return (
     <>
       <PageHeader eyebrow="Administrator" title="Events & bouts">
-        Create and edit events, publish fight cards, record results. A result
-        auto-updates the athletes' win/loss/draw record.
+        Create and edit events, publish fight cards, record results. Recording
+        a result auto-updates each athlete&apos;s win/loss/draw record.
       </PageHeader>
       <Container className="py-10 space-y-6">
         <Link
@@ -45,11 +61,14 @@ export default async function AdminEventsPage() {
         </Link>
 
         {/* New event */}
-        <section className="bg-surface border border-border p-5">
+        <section className="bg-surface border border-border p-5 rounded-xl">
           <h2 className="font-display text-xl text-white tracking-wider mb-4">
             Create event
           </h2>
-          <form action={saveEvent} className="grid gap-3 md:grid-cols-3">
+          <form
+            action={saveEvent}
+            className="grid gap-3 md:grid-cols-3"
+          >
             <F label="Title" name="title" required />
             <F label="Subtitle" name="subtitle" />
             <F label="Starts at (YYYY-MM-DD)" name="starts_at" />
@@ -65,8 +84,33 @@ export default async function AdminEventsPage() {
                 className="w-full px-3 py-2 bg-bg border border-border text-white text-sm"
               >
                 <option>Upcoming</option>
+                <option>Live</option>
                 <option>Past</option>
               </select>
+            </label>
+            <label className="block md:col-span-3">
+              <span className="font-display text-[10px] tracking-wider text-gold uppercase block mb-1">
+                Cover photo (optional, 5 MB max)
+              </span>
+              <input
+                type="file"
+                name="poster"
+                accept="image/*"
+                className="block w-full text-xs text-muted
+                  file:mr-3 file:py-2 file:px-3 file:rounded-full file:border-0
+                  file:text-xs file:font-display file:tracking-wider file:uppercase
+                  file:bg-gold file:text-bg hover:file:bg-gold-hi cursor-pointer"
+              />
+            </label>
+            <label className="block md:col-span-3">
+              <span className="font-display text-[10px] tracking-wider text-gold uppercase block mb-1">
+                Description
+              </span>
+              <textarea
+                name="description"
+                rows={2}
+                className="w-full px-3 py-2 bg-bg border border-border text-white text-sm"
+              />
             </label>
             <div className="md:col-span-3">
               <button className="bg-gold text-bg px-5 py-2 text-xs font-display tracking-wider hover:bg-gold-hi">
@@ -83,26 +127,38 @@ export default async function AdminEventsPage() {
           events.map((e) => (
             <article
               key={e.id}
-              className="bg-surface border border-border p-5 space-y-4"
+              className="bg-surface border border-border p-5 rounded-xl space-y-4"
             >
               <header className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h3 className="font-display text-2xl text-white tracking-wider">
-                    {e.title}
-                  </h3>
-                  <p className="text-xs text-muted mt-1">
-                    {e.startsAt || "Date TBA"} · {e.city} · {e.venue} ·{" "}
-                    <span className="text-gold">
-                      {e._count.registrations} registered · {e._count.bouts}{" "}
-                      bouts
-                    </span>
-                  </p>
+                <div className="flex gap-4 items-start">
+                  {e.posterUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={e.posterUrl}
+                      alt=""
+                      className="w-24 h-24 object-cover rounded-lg border border-border flex-shrink-0"
+                    />
+                  )}
+                  <div>
+                    <h3 className="font-display text-2xl text-white tracking-wider">
+                      {e.title}
+                    </h3>
+                    <p className="text-xs text-muted mt-1">
+                      {e.startsAt || "Date TBA"} · {e.city} · {e.venue} ·{" "}
+                      <span className="text-gold">
+                        {e._count.registrations} registered · {e._count.bouts}{" "}
+                        bouts
+                      </span>
+                    </p>
+                  </div>
                 </div>
                 <span
                   className={`inline-block px-2 py-1 text-[10px] tracking-wider font-display ${
                     e.status === "Upcoming"
                       ? "bg-gold text-bg"
-                      : "bg-border text-white"
+                      : e.status === "Live"
+                        ? "bg-red-500 text-white"
+                        : "bg-border text-white"
                   }`}
                 >
                   {e.status.toUpperCase()}
@@ -110,11 +166,14 @@ export default async function AdminEventsPage() {
               </header>
 
               <div className="grid gap-4 md:grid-cols-2">
-                <details className="bg-bg border border-border">
+                <details className="bg-bg border border-border rounded-lg">
                   <summary className="cursor-pointer px-4 py-3 font-display text-xs tracking-wider text-gold uppercase">
                     Edit event
                   </summary>
-                  <form action={saveEvent} className="p-4 space-y-3">
+                  <form
+                    action={saveEvent}
+                    className="p-4 space-y-3"
+                  >
                     <input type="hidden" name="id" value={e.id} />
                     <F label="Title" name="title" def={e.title} required />
                     <F label="Subtitle" name="subtitle" def={e.subtitle ?? ""} />
@@ -146,9 +205,35 @@ export default async function AdminEventsPage() {
                         className="w-full px-3 py-2 bg-bg border border-border text-white text-sm"
                       >
                         <option>Upcoming</option>
+                        <option>Live</option>
                         <option>Past</option>
                       </select>
                     </label>
+                    <label className="block">
+                      <span className="font-display text-[10px] tracking-wider text-gold uppercase block mb-1">
+                        Replace cover photo
+                      </span>
+                      <input
+                        type="file"
+                        name="poster"
+                        accept="image/*"
+                        className="block w-full text-xs text-muted
+                          file:mr-3 file:py-2 file:px-3 file:rounded-full file:border-0
+                          file:text-xs file:font-display file:tracking-wider file:uppercase
+                          file:bg-gold file:text-bg hover:file:bg-gold-hi cursor-pointer"
+                      />
+                    </label>
+                    {e.posterUrl && (
+                      <label className="flex items-center gap-2 text-xs text-muted">
+                        <input
+                          type="checkbox"
+                          name="remove_poster"
+                          value="1"
+                          className="accent-gold"
+                        />
+                        Remove current cover photo
+                      </label>
+                    )}
                     <div className="flex gap-2">
                       <button className="bg-emerald text-white px-4 py-2 text-xs font-display tracking-wider hover:bg-emerald-hi">
                         SAVE
@@ -157,12 +242,175 @@ export default async function AdminEventsPage() {
                   </form>
                 </details>
 
-                <details className="bg-bg border border-border">
+                <details className="bg-bg border border-border rounded-lg">
                   <summary className="cursor-pointer px-4 py-3 font-display text-xs tracking-wider text-gold uppercase">
-                    + Record a bout result
+                    + Add bout (scheduled, no result yet)
                   </summary>
-                  <form action={recordBoutResult} className="p-4 space-y-3">
+                  <form action={addBout} className="p-4 space-y-3">
                     <input type="hidden" name="event_id" value={e.id} />
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="block">
+                        <span className="font-display text-[10px] tracking-wider text-gold uppercase block mb-1">
+                          Red corner
+                        </span>
+                        <select
+                          name="red_id"
+                          required
+                          className="w-full px-3 py-2 bg-bg border border-border text-white text-sm"
+                        >
+                          {fighters.map((f) => (
+                            <option key={f.id} value={f.id}>
+                              {f.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="block">
+                        <span className="font-display text-[10px] tracking-wider text-gold uppercase block mb-1">
+                          Blue corner
+                        </span>
+                        <select
+                          name="blue_id"
+                          required
+                          className="w-full px-3 py-2 bg-bg border border-border text-white text-sm"
+                        >
+                          {fighters.map((f) => (
+                            <option key={f.id} value={f.id}>
+                              {f.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <label className="block">
+                        <span className="font-display text-[10px] tracking-wider text-gold uppercase block mb-1">
+                          Order
+                        </span>
+                        <input
+                          type="number"
+                          name="bout_order"
+                          min={1}
+                          max={99}
+                          defaultValue={e._count.bouts + 1}
+                          className="w-full px-3 py-2 bg-bg border border-border text-white text-sm"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="font-display text-[10px] tracking-wider text-gold uppercase block mb-1">
+                          Card section
+                        </span>
+                        <select
+                          name="card_section"
+                          defaultValue="Main"
+                          className="w-full px-3 py-2 bg-bg border border-border text-white text-sm"
+                        >
+                          <option>Main</option>
+                          <option>Co-Main</option>
+                          <option>Prelim</option>
+                        </select>
+                      </label>
+                      <label className="block">
+                        <span className="font-display text-[10px] tracking-wider text-gold uppercase block mb-1">
+                          Division
+                        </span>
+                        <select
+                          name="division"
+                          defaultValue=""
+                          className="w-full px-3 py-2 bg-bg border border-border text-white text-sm"
+                        >
+                          <option value="">—</option>
+                          {ALL_DIVISIONS.map((d) => (
+                            <option key={d.id} value={d.id}>
+                              {d.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    <button className="bg-emerald text-white px-4 py-2 text-xs font-display tracking-wider hover:bg-emerald-hi">
+                      ADD BOUT →
+                    </button>
+                  </form>
+                </details>
+              </div>
+
+              {/* Existing bouts on this event */}
+              {e.bouts.length > 0 && (
+                <div className="bg-bg border border-border rounded-lg p-4">
+                  <p className="font-display text-xs tracking-wider text-gold uppercase mb-3">
+                    Fight card ({e.bouts.length})
+                  </p>
+                  <ul className="divide-y divide-border/60">
+                    {e.bouts.map((b) => (
+                      <li
+                        key={b.id}
+                        className="py-2 flex flex-wrap items-center gap-2 text-sm"
+                      >
+                        <span className="font-display text-[10px] tracking-wider text-gold uppercase w-10">
+                          #{b.boutOrder}
+                        </span>
+                        <span className="text-[10px] font-display tracking-wider text-muted uppercase w-16">
+                          {b.cardSection}
+                        </span>
+                        <span className="text-white">
+                          <span className="text-red-300">{b.red.name}</span>
+                          <span className="text-muted mx-2">vs</span>
+                          <span className="text-blue-300">{b.blue.name}</span>
+                        </span>
+                        {b.division && (
+                          <span className="text-xs text-muted">
+                            · {divisionDisplayName(null, b.division)}
+                          </span>
+                        )}
+                        {b.result && (
+                          <span className="text-[9px] font-display tracking-widest bg-emerald text-white px-2 py-0.5 rounded-full ml-auto">
+                            RESULT
+                          </span>
+                        )}
+                        {!b.result && (
+                          <form action={deleteBout} className="ml-auto">
+                            <input type="hidden" name="id" value={b.id} />
+                            <button
+                              type="submit"
+                              className="text-[11px] text-red-400 hover:text-red-300 underline"
+                            >
+                              remove
+                            </button>
+                          </form>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Interest / offer management */}
+              {e.registrations.length > 0 && (
+                <RegistrationsPanel
+                  eventId={e.id}
+                  registrations={e.registrations.map((r) => ({
+                    id: r.id,
+                    status: r.status,
+                    athleteId: r.athleteId,
+                    athleteName: r.athlete.name,
+                    offerOpponent: r.offerOpponent,
+                    offerDivision: r.offerDivision,
+                    offerSection: r.offerSection,
+                    offerNote: r.offerNote,
+                    offerSentAt: r.offerSentAt?.toISOString() ?? null,
+                    respondedAt: r.respondedAt?.toISOString() ?? null,
+                  }))}
+                />
+              )}
+
+              <details className="bg-bg border border-border rounded-lg">
+                <summary className="cursor-pointer px-4 py-3 font-display text-xs tracking-wider text-gold uppercase">
+                  + Record a bout result (closes a bout & updates records)
+                </summary>
+                <form action={recordBoutResult} className="p-4 space-y-3">
+                  <input type="hidden" name="event_id" value={e.id} />
+                  <div className="grid grid-cols-2 gap-2">
                     <label className="block">
                       <span className="font-display text-[10px] tracking-wider text-gold uppercase block mb-1">
                         Red corner
@@ -195,31 +443,31 @@ export default async function AdminEventsPage() {
                         ))}
                       </select>
                     </label>
-                    <label className="block">
-                      <span className="font-display text-[10px] tracking-wider text-gold uppercase block mb-1">
-                        Outcome
-                      </span>
-                      <select
-                        name="outcome"
-                        required
-                        className="w-full px-3 py-2 bg-bg border border-border text-white text-sm"
-                      >
-                        <option value="red">Red wins</option>
-                        <option value="blue">Blue wins</option>
-                        <option value="draw">Draw</option>
-                      </select>
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      <F label="Method" name="method" def="Decision" />
-                      <F label="Round" name="round" type="number" />
-                      <F label="Time" name="time" def="05:00" />
-                    </div>
-                    <button className="bg-gold text-bg px-4 py-2 text-xs font-display tracking-wider hover:bg-gold-hi">
-                      RECORD RESULT →
-                    </button>
-                  </form>
-                </details>
-              </div>
+                  </div>
+                  <label className="block">
+                    <span className="font-display text-[10px] tracking-wider text-gold uppercase block mb-1">
+                      Outcome
+                    </span>
+                    <select
+                      name="outcome"
+                      required
+                      className="w-full px-3 py-2 bg-bg border border-border text-white text-sm"
+                    >
+                      <option value="red">Red wins</option>
+                      <option value="blue">Blue wins</option>
+                      <option value="draw">Draw</option>
+                    </select>
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <F label="Method" name="method" def="Decision" />
+                    <F label="Round" name="round" type="number" />
+                    <F label="Time" name="time" def="05:00" />
+                  </div>
+                  <button className="bg-gold text-bg px-4 py-2 text-xs font-display tracking-wider hover:bg-gold-hi">
+                    RECORD RESULT →
+                  </button>
+                </form>
+              </details>
 
               <form action={deleteEvent}>
                 <input type="hidden" name="id" value={e.id} />
@@ -259,6 +507,128 @@ function F({
         required={required}
         type={type}
         className="w-full px-3 py-2 bg-bg border border-border text-white text-sm"
+      />
+    </label>
+  );
+}
+
+type Registration = {
+  id: number;
+  status: string;
+  athleteId: number;
+  athleteName: string;
+  offerOpponent: string;
+  offerDivision: string;
+  offerSection: string;
+  offerNote: string;
+  offerSentAt: string | null;
+  respondedAt: string | null;
+};
+
+const STATUS_STYLE: Record<string, string> = {
+  interested: "bg-gold/20 text-gold",
+  offered: "bg-orange-500/30 text-orange-200",
+  accepted: "bg-emerald/30 text-emerald-200",
+  declined: "bg-red-500/30 text-red-200",
+  confirmed: "bg-emerald text-white",
+  cancelled: "bg-border text-muted",
+};
+
+function RegistrationsPanel({
+  eventId,
+  registrations,
+}: {
+  eventId: number;
+  registrations: Registration[];
+}) {
+  return (
+    <div className="bg-bg border border-border rounded-lg p-4">
+      <p className="font-display text-xs tracking-wider text-gold uppercase mb-3">
+        Fighter interest ({registrations.length})
+      </p>
+      <ul className="divide-y divide-border/60">
+        {registrations.map((r) => (
+          <li key={r.id} className="py-3 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-white font-display tracking-wider">
+                {r.athleteName}
+              </span>
+              <span
+                className={`inline-block px-2 py-0.5 text-[10px] tracking-wider font-display rounded-full ${
+                  STATUS_STYLE[r.status] ?? "bg-border text-white"
+                }`}
+              >
+                {r.status.toUpperCase()}
+              </span>
+              {r.offerSentAt && (
+                <span className="text-[10px] text-muted">
+                  offered {r.offerSentAt.slice(0, 10)}
+                </span>
+              )}
+              {r.respondedAt && (
+                <span className="text-[10px] text-muted">
+                  · responded {r.respondedAt.slice(0, 10)}
+                </span>
+              )}
+            </div>
+            {(r.status === "offered" || r.status === "accepted" || r.status === "declined") && (
+              <p className="text-xs text-muted">
+                Offer: {r.offerOpponent || "—"}
+                {r.offerDivision && ` · ${r.offerDivision}`}
+                {r.offerSection && ` · ${r.offerSection}`}
+                {r.offerNote && ` · ${r.offerNote}`}
+              </p>
+            )}
+            {(r.status === "interested" || r.status === "declined") && (
+              <details className="bg-surface border border-border rounded">
+                <summary className="cursor-pointer px-3 py-2 font-display text-[10px] tracking-wider text-gold uppercase">
+                  {r.status === "declined" ? "Re-offer bout" : "Offer bout"}
+                </summary>
+                <form action={offerBout} className="p-3 space-y-2">
+                  <input type="hidden" name="event_id" value={eventId} />
+                  <input type="hidden" name="athlete_id" value={r.athleteId} />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <OfferField name="offer_opponent" label="Opponent" />
+                    <OfferField name="offer_division" label="Division" />
+                    <OfferField
+                      name="offer_section"
+                      label="Card section"
+                      placeholder="Main / Co-Main / Prelim"
+                    />
+                    <OfferField name="offer_note" label="Note" />
+                  </div>
+                  <button className="bg-gold text-bg px-3 py-1.5 text-xs font-display tracking-wider hover:bg-gold-hi rounded">
+                    SEND OFFER →
+                  </button>
+                </form>
+              </details>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function OfferField({
+  name,
+  label,
+  placeholder,
+}: {
+  name: string;
+  label: string;
+  placeholder?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="font-display text-[9px] tracking-wider text-gold uppercase block mb-0.5">
+        {label}
+      </span>
+      <input
+        name={name}
+        type="text"
+        placeholder={placeholder}
+        className="w-full px-2 py-1.5 bg-bg border border-border text-white text-xs rounded"
       />
     </label>
   );

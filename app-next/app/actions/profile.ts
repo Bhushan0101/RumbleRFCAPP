@@ -10,6 +10,9 @@ const profileSchema = z.object({
   nickname: z.string().max(120).optional().default(""),
   country: z.string().max(60).optional().default(""),
   biography: z.string().max(4000).optional().default(""),
+  instagram_handle: z.string().max(120).optional().default(""),
+  facebook_url: z.string().max(240).optional().default(""),
+  tiktok_handle: z.string().max(120).optional().default(""),
 });
 
 export type ProfileState = { ok: boolean; message: string };
@@ -39,6 +42,9 @@ export async function updateOwnProfile(
         nickname: d.nickname,
         country: d.country,
         biography: d.biography,
+        instagramHandle: d.instagram_handle.trim(),
+        facebookUrl: d.facebook_url.trim(),
+        tiktokHandle: d.tiktok_handle.trim(),
       },
     }),
     prisma.portalUser.update({
@@ -114,6 +120,91 @@ export async function updatePortraitUrl(
   revalidatePath("/portal/profile");
   revalidatePath(`/fighters/${profile.athleteId}`);
   return { ok: true, message: "Photo updated." };
+}
+
+// ---- Fighter gallery photos ----------------------------------------------
+
+const MAX_PHOTOS_PER_FIGHTER = 20;
+
+export async function addFighterPhoto(
+  _prev: ProfileState,
+  formData: FormData,
+): Promise<ProfileState> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, message: "Please sign in." };
+  const file = formData.get("photo") as File | null;
+  const caption = String(formData.get("caption") ?? "")
+    .toString()
+    .slice(0, 240);
+  if (!file || typeof file === "string" || file.size === 0) {
+    return { ok: false, message: "Choose an image to upload." };
+  }
+  if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+    return { ok: false, message: "Image must be JPG, PNG, WEBP or GIF." };
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    return { ok: false, message: "Image is larger than 5 MB." };
+  }
+  const profile = await prisma.fighterProfile.findFirst({
+    where: { userId: session.user.id },
+    select: { athleteId: true, approvalStatus: true },
+  });
+  if (!profile) return { ok: false, message: "No fighter profile linked." };
+  if (profile.approvalStatus !== "approved") {
+    return { ok: false, message: "Your profile must be approved before you can post photos." };
+  }
+  const count = await prisma.fighterPhoto.count({
+    where: { athleteId: profile.athleteId },
+  });
+  if (count >= MAX_PHOTOS_PER_FIGHTER) {
+    return { ok: false, message: `You can only keep ${MAX_PHOTOS_PER_FIGHTER} photos. Remove one first.` };
+  }
+
+  const ext =
+    file.type === "image/png"
+      ? "png"
+      : file.type === "image/webp"
+        ? "webp"
+        : file.type === "image/gif"
+          ? "gif"
+          : "jpg";
+  const name = `${profile.athleteId}-${Date.now()}.${ext}`;
+
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const dir = join(process.cwd(), "public", "uploads", "fighter-photos");
+  await mkdir(dir, { recursive: true });
+  const buf = Buffer.from(await file.arrayBuffer());
+  await writeFile(join(dir, name), buf);
+  const publicPath = `/uploads/fighter-photos/${name}`;
+
+  await prisma.fighterPhoto.create({
+    data: {
+      athleteId: profile.athleteId,
+      url: publicPath,
+      caption,
+    },
+  });
+  revalidatePath("/portal/profile");
+  revalidatePath(`/fighters/${profile.athleteId}`);
+  return { ok: true, message: "Photo added." };
+}
+
+export async function deleteFighterPhoto(formData: FormData) {
+  const session = await auth();
+  if (!session?.user?.id) return;
+  const id = Number(formData.get("id"));
+  if (!id) return;
+  const profile = await prisma.fighterProfile.findFirst({
+    where: { userId: session.user.id },
+    select: { athleteId: true },
+  });
+  if (!profile) return;
+  await prisma.fighterPhoto.deleteMany({
+    where: { id, athleteId: profile.athleteId },
+  });
+  revalidatePath("/portal/profile");
+  revalidatePath(`/fighters/${profile.athleteId}`);
 }
 
 // ---- Injuries -------------------------------------------------------------

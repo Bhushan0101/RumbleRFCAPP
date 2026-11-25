@@ -10,6 +10,7 @@ export type MailCategory =
   | "fighter_submitted"
   | "fighter_approved"
   | "fighter_rejected"
+  | "fighter_ranked"
   | "gym_enquiry"
   | "gym_onboarding"
   | "gym_submitted"
@@ -223,8 +224,10 @@ export function buildPassportCardHtml(args: {
   record: string;
   nationality: string;
   club: string;
+  ranking: number | null;
   passportUrl: string;
 }): string {
+  const rankingLabel = args.ranking == null ? "Not yet allotted" : `#${args.ranking}`;
   return `<!doctype html><html><body style="margin:0;padding:0;background:#0b1a14;font-family:Helvetica,Arial,sans-serif;color:#f4f1e4;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0b1a14;padding:24px 0;">
   <tr><td align="center">
@@ -248,6 +251,7 @@ export function buildPassportCardHtml(args: {
             ["Division", args.division],
             ["Class", args.className || "—"],
             ["Record", args.record],
+            ["Ranking", rankingLabel],
             ["Nationality", args.nationality || "—"],
             ["Status", "Active"],
           ]
@@ -271,6 +275,11 @@ export function buildPassportCardHtml(args: {
       </td></tr>
       <tr><td style="padding-top:22px;border-top:1px solid #d4a53a33;margin-top:16px;color:#cfe3d8;font-size:14px;line-height:1.55;">
         <p>Your fighter application has been approved. Your passport is now live at the link above — bookmark it or save it to your phone.</p>
+        ${
+          args.ranking == null
+            ? `<p><strong style="color:#d4a53a;">Ranking:</strong> not yet allotted. A W.U.C.O admin will review your record and assign your official ranking. You'll get another email as soon as it's updated.</p>`
+            : ""
+        }
         <p>Welcome to W.U.C.O Ireland.</p>
       </td></tr>
     </table>

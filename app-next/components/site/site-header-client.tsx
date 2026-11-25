@@ -22,6 +22,23 @@ export function SiteHeaderClient({ user, unreadNotifications = 0 }: Props) {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [mobileExpanded, setMobileExpanded] = React.useState<string | null>(null);
 
+  // Hide onboarding CTAs that are irrelevant to the signed-in user:
+  //   - Fighter already registered → hide "Register".
+  //   - Club user (gym/coach) or admin → hide "Join WUCO as a Club".
+  //   - Promoter → hide "Become a Promoter".
+  const role = user?.role ?? "";
+  const hiddenHrefs = new Set<string>();
+  if (role === "fighter") hiddenHrefs.add("/register");
+  if (role === "gym" || role === "coach" || role === "admin" || role === "ranking_admin") {
+    hiddenHrefs.add("/clubs/join");
+  }
+  if (role === "promoter" || role === "admin") hiddenHrefs.add("/promoters/join");
+
+  const filteredNav = NAV.map((item) => {
+    if (!item.children) return item;
+    return { ...item, children: item.children.filter((c) => !hiddenHrefs.has(c.href)) };
+  });
+
   return (
     <>
       <header
@@ -42,7 +59,7 @@ export function SiteHeaderClient({ user, unreadNotifications = 0 }: Props) {
             className="hidden lg:flex flex-1 justify-center"
           >
             <ul className="flex items-center gap-7">
-              {NAV.map((item) => (
+              {filteredNav.map((item) => (
                 <li key={item.label} className="relative group">
                   <Link
                     href={item.href}
@@ -132,7 +149,7 @@ export function SiteHeaderClient({ user, unreadNotifications = 0 }: Props) {
           >
             <Container className="py-3">
               <ul className="flex flex-col">
-                {NAV.map((item) => (
+                {filteredNav.map((item) => (
                   <li
                     key={item.label}
                     className="border-b border-black/10 last:border-b-0"

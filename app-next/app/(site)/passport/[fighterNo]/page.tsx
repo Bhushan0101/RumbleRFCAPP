@@ -43,6 +43,7 @@ export default async function PassportPage({ params }: { params: Params }) {
         include: {
           profile: { include: { gym: true } },
           disciplines: true,
+          rankings: true,
         },
       },
     },
@@ -55,6 +56,12 @@ export default async function PassportPage({ params }: { params: Params }) {
   // Sort disciplines so primary shows first.
   const disciplines = [...row.athlete.disciplines].sort(
     (a, b) => b.isPrimary - a.isPrimary,
+  );
+
+  // The division carried on the Athlete row is the fighter's primary division.
+  // A matching Ranking row is the official allotted position (if set).
+  const primaryRanking = row.athlete.rankings.find(
+    (r) => r.division === row.athlete.division,
   );
 
   const data = {
@@ -73,6 +80,7 @@ export default async function PassportPage({ params }: { params: Params }) {
     nationality: row.athlete.country || "Ireland",
     club: row.athlete.profile?.gym?.name ?? "Independent",
     portraitUrl: row.athlete.portraitUrl ?? null,
+    ranking: primaryRanking?.position ?? null,
     disciplines: disciplines.map((d) => ({
       martialArt: d.martialArt,
       classCode: d.classCode,

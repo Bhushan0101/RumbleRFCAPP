@@ -8,7 +8,7 @@ import { OnboardingForm } from "@/components/forms/onboarding-form";
 
 type Search = Promise<{ token?: string }>;
 
-export const metadata = { title: "Gym onboarding" };
+export const metadata = { title: "Club onboarding" };
 
 export default async function OnboardingPage({
   searchParams,
@@ -34,9 +34,9 @@ export default async function OnboardingPage({
 
   return (
     <>
-      <PageHeader eyebrow="Welcome to W.U.C.O" title="Gym onboarding">
+      <PageHeader eyebrow="Welcome to W.U.C.O" title="Club onboarding">
         {enquiry
-          ? `${enquiry.contactName}, finish setting up ${enquiry.gymName}.`
+          ? `${enquiry.contactName}, complete the detailed club & head-coach form for ${enquiry.gymName}.`
           : "Open the invitation link your W.U.C.O admin sent."}
       </PageHeader>
       <Container className="py-10">
@@ -49,6 +49,7 @@ export default async function OnboardingPage({
             token={token}
             gymName={enquiry.gymName}
             city={enquiry.city}
+            contactEmail={enquiry.contactEmail}
           />
         ) : null}
       </Container>

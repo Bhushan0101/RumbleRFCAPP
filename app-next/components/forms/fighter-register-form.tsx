@@ -18,7 +18,7 @@ type Step = 1 | 2 | 3 | 4;
 const STEP_FIELDS: Record<Step, string[]> = {
   1: ["first_name", "last_name", "email", "password"],
   2: ["gender", "disciplines", "division"],
-  3: ["date_of_birth", "country", "record_note"],
+  3: ["date_of_birth", "country", "gym_name", "coach_name", "record_note"],
   4: ["accept_terms", "accept_privacy", "accept_accuracy"],
 };
 
@@ -390,7 +390,7 @@ export function FighterRegisterForm() {
                     )}
                   </label>
                   {checked && classRequired && (
-                    <div className="mt-3 grid grid-cols-3 gap-1.5">
+                    <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-1.5">
                       {classes.map((c) => (
                         <label
                           key={c.id}
@@ -408,7 +408,9 @@ export function FighterRegisterForm() {
                             onChange={() => updateRow(m.id, "classCode", c.id)}
                             className="sr-only"
                           />
-                          {c.id}
+                          {/* Kickboxing/Muay Thai keep the single-letter id (J/N/L/C/B/A).
+                              Boxing/MMA show the full name. */}
+                          {c.id.length === 1 ? c.id : c.name}
                         </label>
                       ))}
                     </div>
@@ -481,6 +483,23 @@ export function FighterRegisterForm() {
               </span>
             )}
           </label>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field
+            name="gym_name"
+            label="Gym name"
+            required
+            errors={state.errors?.gym_name}
+            hint="The gym you train at. Required for verification."
+          />
+          <Field
+            name="coach_name"
+            label="Coach name"
+            required
+            errors={state.errors?.coach_name}
+            hint="Your head coach or primary instructor."
+          />
         </div>
 
         <fieldset className="border border-border rounded-xl p-4">
@@ -744,6 +763,12 @@ function RecordInput({
   value: number;
   onChange: (v: number) => void;
 }) {
+  // Keep a local string so the leading 0 clears cleanly on focus / typing.
+  const [text, setText] = React.useState<string>(value > 0 ? String(value) : "");
+  // Sync when the parent resets the value (e.g. after unticking a discipline).
+  React.useEffect(() => {
+    setText(value > 0 ? String(value) : "");
+  }, [value]);
   return (
     <label className="block">
       <span className="block font-display text-xs tracking-wider text-gold uppercase mb-1.5">
@@ -751,12 +776,34 @@ function RecordInput({
       </span>
       <input
         type="number"
+        inputMode="numeric"
         min={0}
         max={999}
-        value={value}
+        value={text}
+        placeholder="0"
+        onFocus={(e) => {
+          if (text === "0") {
+            setText("");
+            onChange(0);
+          }
+          // Select so typing replaces any stray value on iOS.
+          e.currentTarget.select();
+        }}
         onChange={(e) => {
-          const n = Number(e.target.value);
-          onChange(Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0);
+          const raw = e.target.value;
+          // Allow blank while editing — commit on blur.
+          if (raw === "") {
+            setText("");
+            onChange(0);
+            return;
+          }
+          const n = Number(raw);
+          if (!Number.isFinite(n) || n < 0) return;
+          setText(raw);
+          onChange(Math.floor(n));
+        }}
+        onBlur={() => {
+          if (text === "") setText("");
         }}
         className="w-full px-4 py-3 bg-bg border border-border text-white focus:border-gold outline-none rounded-lg"
       />

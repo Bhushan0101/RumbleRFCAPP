@@ -5,6 +5,7 @@ import { Container } from "@/components/ui/container";
 import { PageHeader } from "@/components/site/page-header";
 import { martialArtName, classDisplayName, martialArtRequiresClass } from "@/lib/martial-arts";
 import { divisionDisplayName, genderName } from "@/lib/divisions";
+import { instagramUrl, facebookUrl, tiktokUrl } from "@/lib/socials";
 
 type Params = Promise<{ id: string }>;
 
@@ -25,6 +26,7 @@ export default async function FighterPage({ params }: { params: Params }) {
       rankings: true,
       disciplines: true,
       fightHistory: { orderBy: { fightDate: "desc" } },
+      photos: { orderBy: { createdAt: "desc" } },
     },
   });
   if (!f || f.profile?.approvalStatus !== "approved") notFound();
@@ -122,6 +124,11 @@ export default async function FighterPage({ params }: { params: Params }) {
                   View digital passport →
                 </Link>
               )}
+              <FighterSocials
+                instagram={f.instagramHandle}
+                facebook={f.facebookUrl}
+                tiktok={f.tiktokHandle}
+              />
             </dl>
           </aside>
           <section className="space-y-6">
@@ -184,9 +191,115 @@ export default async function FighterPage({ params }: { params: Params }) {
                 </ol>
               </div>
             )}
+            {f.photos.length > 0 && (
+              <div className="bg-surface border border-border p-6">
+                <h2 className="font-display text-xl text-white tracking-wider mb-3">
+                  Photos
+                </h2>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {f.photos.map((p) => (
+                    <figure
+                      key={p.id}
+                      className="relative aspect-square rounded-lg overflow-hidden border border-border bg-black/40"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={p.url}
+                        alt={p.caption || f.name}
+                        className="w-full h-full object-cover"
+                      />
+                      {p.caption && (
+                        <figcaption className="absolute inset-x-0 bottom-0 bg-black/70 text-white text-[11px] px-2 py-1 line-clamp-2">
+                          {p.caption}
+                        </figcaption>
+                      )}
+                    </figure>
+                  ))}
+                </div>
+              </div>
+            )}
           </section>
         </div>
       </Container>
     </>
+  );
+}
+
+function FighterSocials({
+  instagram,
+  facebook,
+  tiktok,
+}: {
+  instagram: string;
+  facebook: string;
+  tiktok: string;
+}) {
+  const ig = instagramUrl(instagram);
+  const fb = facebookUrl(facebook);
+  const tt = tiktokUrl(tiktok);
+  if (!ig && !fb && !tt) return null;
+  return (
+    <div className="pt-3 border-t border-border/50">
+      <p className="text-[10px] tracking-wider text-gold uppercase mb-2">Social</p>
+      <div className="flex items-center gap-2">
+        {ig && (
+          <a
+            href={ig}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`${instagram || "Instagram"} on Instagram`}
+            className="grid place-items-center size-9 rounded-full border border-border hover:border-gold hover:text-gold text-white transition-colors"
+          >
+            <IgIcon />
+          </a>
+        )}
+        {tt && (
+          <a
+            href={tt}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`${tiktok || "TikTok"} on TikTok`}
+            className="grid place-items-center size-9 rounded-full border border-border hover:border-gold hover:text-gold text-white transition-colors"
+          >
+            <TikTokIcon />
+          </a>
+        )}
+        {fb && (
+          <a
+            href={fb}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`${facebook || "Facebook"} on Facebook`}
+            className="grid place-items-center size-9 rounded-full border border-border hover:border-gold hover:text-gold text-white transition-colors"
+          >
+            <FbIcon />
+          </a>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function IgIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <rect x="2" y="2" width="20" height="20" rx="5" />
+      <circle cx="12" cy="12" r="4" />
+      <circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+function FbIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-4" fill="currentColor" aria-hidden>
+      <path d="M13 22v-8h3l1-4h-4V7.5c0-1.2.4-2 2.2-2H17V2.1C16.7 2 15.4 2 14.3 2 11.6 2 9.8 3.7 9.8 6.9V10H7v4h2.8v8h3.2z" />
+    </svg>
+  );
+}
+function TikTokIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-4" fill="currentColor" aria-hidden>
+      <path d="M19.6 7.3c-1.3-.3-2.3-1.2-2.8-2.4V4h-3.3v13.3c0 1.4-1.2 2.6-2.6 2.6s-2.6-1.2-2.6-2.6 1.2-2.6 2.6-2.6c.3 0 .6 0 .9.1v-3.4c-.3 0-.6-.1-.9-.1-3.3 0-6 2.7-6 6s2.7 6 6 6 6-2.7 6-6V9.6c1.2.8 2.7 1.3 4.3 1.3V7.5c-.5 0-1-.1-1.6-.2z" />
+    </svg>
   );
 }

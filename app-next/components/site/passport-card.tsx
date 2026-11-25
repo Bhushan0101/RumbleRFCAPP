@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import QRCode from "qrcode";
-import { User, Shield, Users, Flag, Scale, Activity } from "lucide-react";
+import { User, Shield, Users, Flag, Scale, Activity, Trophy } from "lucide-react";
 import { martialArtName, classDisplayName, martialArtRequiresClass } from "@/lib/martial-arts";
 
 // Status mapping — maps real DB values (approved / pending_approval / rejected) to
@@ -36,6 +36,8 @@ type Data = {
   nationality: string;
   club: string;
   portraitUrl: string | null;
+  /** Primary-division ranking position once an admin allots it, else null. */
+  ranking?: number | null;
   disciplines?: DisciplineRow[];
 };
 
@@ -266,6 +268,21 @@ export function PassportCard({ data }: { data: Data }) {
               <FieldRow icon={Users} label="Gender" value={data.gender || "—"} />
               <FieldRow icon={Flag} label="Nationality" value={data.nationality} />
               <FieldRow icon={Scale} label="Division" value={data.division || "—"} />
+              <FieldRow
+                icon={Trophy}
+                label="Ranking"
+                value={
+                  data.ranking != null ? (
+                    <span className="font-display tracking-wider text-gold">
+                      #{data.ranking}
+                    </span>
+                  ) : (
+                    <span className="text-white/70 italic text-xs md:text-sm">
+                      Not yet allotted
+                    </span>
+                  )
+                }
+              />
               <FieldRow
                 icon={Activity}
                 label="Status"

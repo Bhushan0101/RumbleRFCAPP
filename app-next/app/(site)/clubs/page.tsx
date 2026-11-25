@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { auth } from "@/lib/auth";
 import { Container } from "@/components/ui/container";
 import { PageHeader } from "@/components/site/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -10,11 +11,17 @@ export const metadata = {
 };
 
 export default async function ClubsPage() {
-  const gyms = await prisma.gym.findMany({
-    where: { status: "active" },
-    include: { _count: { select: { fighters: true, classes: true } } },
-    orderBy: { name: "asc" },
-  });
+  const [session, gyms] = await Promise.all([
+    auth(),
+    prisma.gym.findMany({
+      where: { status: "active" },
+      include: { _count: { select: { fighters: true, classes: true } } },
+      orderBy: { name: "asc" },
+    }),
+  ]);
+  const role = session?.user?.role ?? "";
+  const hideJoinCta =
+    role === "gym" || role === "coach" || role === "admin" || role === "ranking_admin";
 
   return (
     <>
@@ -25,12 +32,14 @@ export default async function ClubsPage() {
       <Container className="py-10">
         <div className="flex items-center justify-between mb-6">
           <p className="text-sm text-muted">{gyms.length} active clubs</p>
-          <Link
-            href="/clubs/join"
-            className="bg-gold text-bg px-5 py-2.5 font-display font-bold text-xs tracking-wider hover:bg-gold-hi"
-          >
-            JOIN WUCO AS A CLUB →
-          </Link>
+          {!hideJoinCta && (
+            <Link
+              href="/clubs/join"
+              className="bg-gold text-bg px-5 py-2.5 font-display font-bold text-xs tracking-wider hover:bg-gold-hi"
+            >
+              JOIN WUCO AS A CLUB →
+            </Link>
+          )}
         </div>
         {gyms.length === 0 ? (
           <EmptyState

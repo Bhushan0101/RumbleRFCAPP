@@ -178,6 +178,8 @@ const registerSchema = z
       .optional()
       .or(z.literal("")),
     record_note: z.string().max(2000).optional().default(""),
+    gym_name: z.string().min(1, "Enter your gym name.").max(200),
+    coach_name: z.string().min(1, "Enter your coach's name.").max(200),
     // Required acknowledgements from the review step. Checkbox value is "on"
     // when ticked, missing otherwise — a mismatch makes the whole submit fail.
     accept_terms: z.literal("on", { message: "You must agree to the Terms & Conditions." }),
@@ -304,9 +306,13 @@ export async function registerFighter(
         approvalStatus: "pending_approval",
         legacyMember: 0,
         createdById: user.id,
-        reviewNote: d.record_note
-          ? `Declared record note: ${d.record_note}`
-          : "",
+        reviewNote: [
+          `Gym: ${d.gym_name}`,
+          `Coach: ${d.coach_name}`,
+          d.record_note ? `Record note: ${d.record_note}` : "",
+        ]
+          .filter(Boolean)
+          .join(" · "),
       },
     });
     const auditLines = d.disciplines
@@ -320,7 +326,7 @@ export async function registerFighter(
         athleteId: athlete.id,
         actorId: user.id,
         action: "submitted",
-        note: `Declared records → ${auditLines}. ${d.record_note ?? ""}`.trim(),
+        note: `Declared records → ${auditLines}. Gym: ${d.gym_name}. Coach: ${d.coach_name}. ${d.record_note ?? ""}`.trim(),
       },
     });
   });
@@ -339,7 +345,7 @@ export async function registerFighter(
   await sendMail({
     to: MAIL_ADMIN,
     subject: `New fighter signup: ${name}`,
-    body: `${name} <${email}> has registered.\nDivision: ${divisionName}\nDisciplines:\n${disciplineLines}${d.record_note ? `\nRecord notes: ${d.record_note}` : ""}\n\nReview in the admin portal.`,
+    body: `${name} <${email}> has registered.\nGym: ${d.gym_name}\nCoach: ${d.coach_name}\nDivision: ${divisionName}\nDisciplines:\n${disciplineLines}${d.record_note ? `\nRecord notes: ${d.record_note}` : ""}\n\nReview in the admin portal.`,
     category: "fighter_signup",
   });
   await sendMail({

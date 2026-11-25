@@ -151,8 +151,19 @@ export async function reviewFighter(
         const passportUrl = `${SITE_URL}/passport/${fighterNo}`;
         await sendMail({
           to: n.email,
-          subject: `W.U.C.O: your fighter passport ${fighterNo} is live`,
-          body: `Hi ${n.name},\n\nYour W.U.C.O fighter application has been approved.\n\nFighter number: ${fighterNo}\nDiscipline: ${n.discipline}\nDivision: ${n.division}\nClass: ${n.className}\nRecord: ${n.record}\n\nYour passport is live at: ${passportUrl}${p.note ? `\n\nAdmin note: ${p.note}` : ""}\n\n— W.U.C.O Ireland`,
+          subject: `W.U.C.O: your fighter application has been approved — ${fighterNo}`,
+          body:
+            `Hi ${n.name},\n\n` +
+            `Your W.U.C.O fighter application has been approved.\n\n` +
+            `Fighter number: ${fighterNo}\n` +
+            `Discipline: ${n.discipline}\n` +
+            `Division: ${n.division}\n` +
+            `Class: ${n.className}\n` +
+            `Record: ${n.record}\n\n` +
+            `Ranking: not yet allotted — a W.U.C.O admin will review your record and assign your official ranking. ` +
+            `You'll get another email once your ranking has been updated.\n\n` +
+            `Your passport is live at: ${passportUrl}` +
+            `${p.note ? `\n\nAdmin note: ${p.note}` : ""}\n\n— W.U.C.O Ireland`,
           html: buildPassportCardHtml({
             name: n.name,
             fighterNo,
@@ -162,6 +173,7 @@ export async function reviewFighter(
             record: n.record,
             nationality: n.nationality,
             club: n.club,
+            ranking: null,
             passportUrl,
           }),
           category: "fighter_approved",
@@ -261,7 +273,7 @@ export async function inviteGym(formData: FormData) {
       },
     }),
   ]);
-  const link = `/clubs/onboarding?token=${token}`;
+  const link = `${SITE_URL}/clubs/onboarding?token=${token}`;
   await sendMail({
     to: enquiry.contactEmail,
     subject: "W.U.C.O gym onboarding link",
@@ -275,6 +287,8 @@ export async function rejectEnquiry(formData: FormData) {
   const admin = await requireAdmin();
   const enquiryId = Number(formData.get("enquiry_id"));
   const note = String(formData.get("note") ?? "").slice(0, 1000);
+  const enquiry = await prisma.gymEnquiry.findUnique({ where: { id: enquiryId } });
+  if (!enquiry) throw new Error("Enquiry not found");
   await prisma.gymEnquiry.update({
     where: { id: enquiryId },
     data: {
@@ -284,21 +298,116 @@ export async function rejectEnquiry(formData: FormData) {
       reviewNote: note,
     },
   });
+  // Notify the club.
+  await sendMail({
+    to: enquiry.contactEmail,
+    subject: `W.U.C.O: your club application was not approved`,
+    body:
+      `Hi ${enquiry.contactName},\n\n` +
+      `After review, your W.U.C.O club application for ${enquiry.gymName} was not approved at this time.\n\n` +
+      (note ? `Reason: ${note}\n\n` : "") +
+      `If you have questions or additional information, reply to this email.\n\n— W.U.C.O Ireland`,
+    category: "gym_submitted",
+  });
+  revalidatePath("/portal/admin/gyms");
+}
+
+// -------- Request more info (admin → club Q&A thread) -------------------
+export async function requestGymInfo(formData: FormData) {
+  const admin = await requireAdmin();
+  const enquiryId = Number(formData.get("enquiry_id"));
+  const question = String(formData.get("question") ?? "").trim().slice(0, 4000);
+  if (!question) throw new Error("Write a question before sending.");
+  const enquiry = await prisma.gymEnquiry.findUnique({ where: { id: enquiryId } });
+  if (!enquiry) throw new Error("Enquiry not found");
+
+  // Create or reuse a live follow-up token (14-day validity, kind='followup').
+  const now = Math.floor(Date.now() / 1000);
+  const existingToken = await prisma.gymOnboardingToken.findFirst({
+    where: {
+      enquiryId,
+      kind: "followup",
+      usedAt: null,
+      expiresAt: { gt: now },
+    },
+  });
+  const token = existingToken?.token ?? randomBase64Url(24);
+  const expires = now + 14 * 24 * 3600;
+  if (!existingToken) {
+    await prisma.gymOnboardingToken.create({
+      data: { token, enquiryId, expiresAt: expires, kind: "followup" },
+    });
+  } else {
+    await prisma.gymOnboardingToken.update({
+      where: { token },
+      data: { expiresAt: expires },
+    });
+  }
+
+  await prisma.$transaction([
+    prisma.gymEnquiryFollowup.create({
+      data: {
+        enquiryId,
+        askedById: Number(admin.id),
+        question,
+      },
+    }),
+    prisma.gymEnquiry.update({
+      where: { id: enquiryId },
+      data: { status: "info_requested" },
+    }),
+  ]);
+
+  const link = `${SITE_URL}/clubs/followup?token=${token}`;
+  await sendMail({
+    to: enquiry.contactEmail,
+    subject: `W.U.C.O: additional info requested for ${enquiry.gymName}`,
+    body:
+      `Hi ${enquiry.contactName},\n\n` +
+      `A W.U.C.O admin has asked for some additional information before we can approve ${enquiry.gymName}.\n\n` +
+      `Open the follow-up form (valid for 14 days) to answer every open question:\n${link}\n\n` +
+      `Most recent question:\n${question}\n\n— W.U.C.O Ireland`,
+    category: "gym_onboarding",
+  });
   revalidatePath("/portal/admin/gyms");
 }
 
 export async function approveGymEnquiry(formData: FormData) {
   const admin = await requireAdmin();
   const enquiryId = Number(formData.get("enquiry_id"));
-  const enquiry = await prisma.gymEnquiry.findUnique({ where: { id: enquiryId } });
+  const enquiry = await prisma.gymEnquiry.findUnique({
+    where: { id: enquiryId },
+    include: { followups: true },
+  });
   if (!enquiry) throw new Error("Enquiry not found");
-  if (enquiry.status !== "submitted")
-    throw new Error("Only submitted onboardings can be approved");
+  if (enquiry.status !== "submitted" && enquiry.status !== "info_requested")
+    throw new Error("Only submitted / info-requested onboardings can be approved");
+  const unanswered = enquiry.followups.filter((f) => !f.answeredAt).length;
+  if (unanswered > 0) {
+    throw new Error(
+      `There are ${unanswered} unanswered follow-up question${unanswered === 1 ? "" : "s"}. Wait for the club to respond before approving.`,
+    );
+  }
   const gym = await prisma.gym.findFirst({
     where: { contactEmail: enquiry.contactEmail },
     orderBy: { id: "desc" },
   });
   if (!gym) throw new Error("No matching gym onboarding found");
+
+  // Refuse if the contact email is already a W.U.C.O account — an email can
+  // only belong to one role (PortalUser.email is unique). The admin needs to
+  // change the enquiry's contact email before approving.
+  const emailTaken = await prisma.portalUser.findUnique({
+    where: { email: enquiry.contactEmail },
+    select: { id: true, role: true, name: true },
+  });
+  if (emailTaken) {
+    throw new Error(
+      `${enquiry.contactEmail} is already used by another W.U.C.O account ` +
+        `(${emailTaken.role}: ${emailTaken.name}). Ask the club to use a different ` +
+        `email for the coach login, then try approving again.`,
+    );
+  }
 
   const tempPassword = randomBase64Url(8);
   const { salt, hash } = await hashPassword(tempPassword);
@@ -345,8 +454,15 @@ export async function approveGymEnquiry(formData: FormData) {
   }
   await sendMail({
     to: enquiry.contactEmail,
-    subject: "Your W.U.C.O gym page is live",
-    body: `Hi ${enquiry.contactName},\n\n${gym.name} is now approved on W.U.C.O. Your coach account has been created.\n\n  Email: ${enquiry.contactEmail}\n  Temporary password: ${tempPassword}\n\nPlease change the password after your first sign in.`,
+    subject: `W.U.C.O: ${gym.name} has been approved — your login`,
+    body:
+      `Hi ${enquiry.contactName},\n\n` +
+      `${gym.name} is now approved on W.U.C.O Ireland. Your coach account has been created.\n\n` +
+      `Sign in at ${process.env.NEXT_PUBLIC_SITE_URL || "the W.U.C.O site"}/portal/sign-in with:\n\n` +
+      `  Email: ${enquiry.contactEmail}\n` +
+      `  Temporary password: ${tempPassword}\n\n` +
+      `Please change your password after your first sign-in from the portal.\n\n` +
+      `— W.U.C.O Ireland`,
     category: "gym_approved",
   });
   revalidatePath("/portal/admin/gyms");
@@ -472,4 +588,73 @@ export async function rejectVerificationRequest(formData: FormData) {
   });
   revalidatePath("/portal/admin/verifications");
   revalidatePath("/portal/profile");
+}
+
+// -------- Admin closes a club (processes withdrawal too) ----------------
+export async function closeGym(formData: FormData) {
+  const admin = await requireAdmin();
+  const gymId = Number(formData.get("gym_id"));
+  const note = String(formData.get("note") ?? "").slice(0, 1000);
+  const closureRequestId = Number(formData.get("closure_request_id")) || null;
+  const deleteOwnerLogin = formData.get("delete_owner_login") === "1";
+
+  const gym = await prisma.gym.findUnique({
+    where: { id: gymId },
+    include: { owner: true },
+  });
+  if (!gym) throw new Error("Club not found.");
+
+  const ownerIdToWipe = deleteOwnerLogin ? gym.ownerId : null;
+
+  await prisma.$transaction(async (tx) => {
+    // Unlink every fighter currently affiliated with this gym.
+    await tx.fighterProfile.updateMany({
+      where: { gymId },
+      data: { gymId: null },
+    });
+    await tx.gym.update({
+      where: { id: gymId },
+      data: { status: "withdrawn", ownerId: null },
+    });
+    if (closureRequestId) {
+      await tx.gymClosureRequest.update({
+        where: { id: closureRequestId },
+        data: {
+          status: "processed",
+          processedAt: new Date(),
+          processedById: Number(admin.id),
+        },
+      });
+    }
+    if (ownerIdToWipe) {
+      // Detach the Coach row (userId is unique) then delete the login so the
+      // email becomes reusable. If anything references the user elsewhere the
+      // delete will error — surface that to the admin instead of silently
+      // orphaning data.
+      await tx.coach.deleteMany({ where: { userId: ownerIdToWipe } });
+      await tx.portalUser.delete({ where: { id: ownerIdToWipe } });
+    }
+  });
+
+  if (gym.owner?.email) {
+    await sendMail({
+      to: gym.owner.email,
+      subject: `W.U.C.O: ${gym.name} has been closed`,
+      body:
+        `Hi ${gym.owner.name},\n\n` +
+        `A W.U.C.O admin has closed ${gym.name}. Your public club page is no ` +
+        `longer visible, and fighters previously affiliated with your club have ` +
+        `been unlinked.\n\n` +
+        (deleteOwnerLogin
+          ? `Your coach login has also been removed, so your email is now free to use for a different W.U.C.O account.\n\n`
+          : "") +
+        (note ? `Note from the admin team: ${note}\n\n` : "") +
+        `If this was done in error, reply to this email.\n\n— W.U.C.O Ireland`,
+      category: "gym_submitted",
+    });
+  }
+
+  revalidatePath("/portal/admin/gyms");
+  revalidatePath("/clubs");
+  if (gym.slug) revalidatePath(`/clubs/${gym.slug}`);
 }

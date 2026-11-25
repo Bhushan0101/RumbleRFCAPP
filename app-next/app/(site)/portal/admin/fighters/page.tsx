@@ -31,8 +31,16 @@ export default async function AdminFightersPage({
   const applications = await prisma.fighterProfile.findMany({
     where,
     include: {
-      athlete: { include: { passport: true, disciplines: true } },
+      athlete: {
+        include: {
+          passport: true,
+          disciplines: true,
+          audits: { orderBy: { createdAt: "asc" } },
+        },
+      },
       user: true,
+      gym: true,
+      coach: true,
     },
     orderBy: [{ approvalStatus: "asc" }, { athlete: { name: "asc" } }],
   });
@@ -123,11 +131,13 @@ export default async function AdminFightersPage({
                   <StatusBadge status={a.approvalStatus} />
                 </header>
 
-                {a.reviewNote && (
+                {a.reviewNote && !/^Gym:\s.*(·\s*Coach:|$)/.test(a.reviewNote) && (
                   <p className="text-xs text-muted border-l-2 border-gold pl-3 mb-4">
                     Admin note: {a.reviewNote}
                   </p>
                 )}
+
+                <ApplicationDetails app={a} />
 
                 <div className="grid gap-4 md:grid-cols-2">
                   {/* Decision form */}
@@ -258,5 +268,134 @@ function StatusBadge({ status }: { status: string }) {
     >
       {status.replace("_", " ").toUpperCase()}
     </span>
+  );
+}
+
+type AppWithExtras = {
+  athlete: {
+    disciplines: {
+      martialArt: string;
+      classCode: string | null;
+      wins: number;
+      losses: number;
+      draws: number;
+      isPrimary: number;
+    }[];
+    audits: { action: string; note: string; createdAt: Date }[];
+    country: string | null;
+    dateOfBirth: string;
+    gender: string | null;
+  };
+  gym: { name: string } | null;
+  coach: { name: string } | null;
+  reviewNote: string;
+};
+
+function ApplicationDetails({ app }: { app: AppWithExtras }) {
+  const submittedAudit = app.athlete.audits.find((a) => a.action === "submitted");
+  // Pull the record_note the applicant entered at signup — the submission audit note
+  // carries "Declared records → … <trailing record_note>".
+  const recordNote = (() => {
+    if (!submittedAudit) return "";
+    // Everything after the last period before the final free-text block isn't reliable;
+    // the register action appends the note with a trailing space, so just surface
+    // whatever comes after the first "→ " and the "; " joined record list.
+    const n = submittedAudit.note;
+    const idx = n.indexOf(". ");
+    if (idx === -1) return "";
+    const tail = n.slice(idx + 2).trim();
+    return tail;
+  })();
+
+  // Gym and coach names captured at registration live in `FighterProfile.reviewNote`
+  // as "Gym: <name> · Coach: <name> · Record note: …". The relational FighterProfile.gym
+  // and .coach only populate later if an admin links the fighter to a Gym/Coach record.
+  // Parse the typed names out of reviewNote for display.
+  const typedGym = (() => {
+    const m = app.reviewNote.match(/Gym:\s*([^·]+?)(?:\s*·|$)/);
+    return m ? m[1].trim() : "";
+  })();
+  const typedCoach = (() => {
+    const m = app.reviewNote.match(/Coach:\s*([^·]+?)(?:\s*·|$)/);
+    return m ? m[1].trim() : "";
+  })();
+  const gymDisplay = app.gym?.name ?? typedGym;
+  const coachDisplay = app.coach?.name ?? typedCoach;
+  // Only keep genuine free-text applicant notes — strip the gym/coach lines the
+  // submission audit auto-prepends so we don't double up.
+  const cleanApplicantNotes = recordNote
+    .replace(/Gym:\s*[^.]+\.\s*/g, "")
+    .replace(/Coach:\s*[^.]+\.\s*/g, "")
+    .trim();
+
+  return (
+    <div className="bg-bg/60 border border-border rounded-lg p-4 mb-4 space-y-3">
+      <h4 className="font-display text-xs tracking-wider text-gold uppercase">
+        Application details
+      </h4>
+      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs">
+        <div>
+          <dt className="text-[10px] uppercase tracking-wider text-muted">Gym</dt>
+          <dd className="text-white font-display">
+            {gymDisplay || <span className="text-red-300">Not supplied</span>}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-[10px] uppercase tracking-wider text-muted">Coach</dt>
+          <dd className="text-white font-display">
+            {coachDisplay || <span className="text-red-300">Not supplied</span>}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-[10px] uppercase tracking-wider text-muted">Country</dt>
+          <dd className="text-white">{app.athlete.country || "—"}</dd>
+        </div>
+        <div>
+          <dt className="text-[10px] uppercase tracking-wider text-muted">Date of birth</dt>
+          <dd className="text-white">{app.athlete.dateOfBirth || "—"}</dd>
+        </div>
+      </dl>
+
+      {app.athlete.disciplines.length > 0 && (
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-muted mb-1">
+            Disciplines & declared record
+          </p>
+          <ul className="text-xs space-y-0.5">
+            {[...app.athlete.disciplines]
+              .sort((a, b) => b.isPrimary - a.isPrimary)
+              .map((d) => (
+                <li key={d.martialArt} className="flex flex-wrap items-center gap-2 text-white">
+                  <span className="font-display tracking-wider uppercase">
+                    {martialArtName(d.martialArt)}
+                  </span>
+                  {d.classCode && martialArtRequiresClass(d.martialArt) && (
+                    <span className="text-gold">
+                      · {classDisplayName(d.martialArt, d.classCode)}
+                    </span>
+                  )}
+                  {d.isPrimary === 1 && (
+                    <span className="bg-gold text-bg text-[9px] px-1.5 py-0.5 rounded-full">
+                      PRIMARY
+                    </span>
+                  )}
+                  <span className="ml-auto font-display">
+                    {d.wins}-{d.losses}-{d.draws}
+                  </span>
+                </li>
+              ))}
+          </ul>
+        </div>
+      )}
+
+      {cleanApplicantNotes && (
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-muted mb-1">
+            Applicant notes
+          </p>
+          <p className="text-xs text-white/85 whitespace-pre-wrap">{cleanApplicantNotes}</p>
+        </div>
+      )}
+    </div>
   );
 }

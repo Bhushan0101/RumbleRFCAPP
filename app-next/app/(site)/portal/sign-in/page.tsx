@@ -14,6 +14,11 @@ export default function SignInPage() {
       <Container className="py-10">
         <div className="max-w-md mx-auto bg-surface border border-border p-6 md:p-8">
           <SignInForm />
+          <p className="mt-4 text-sm text-muted text-right">
+            <Link href="/portal/forgot-password" className="text-gold underline">
+              Forgot your password?
+            </Link>
+          </p>
           <p className="mt-6 text-sm text-muted">
             New to W.U.C.O?{" "}
             <Link href="/register" className="text-gold underline">

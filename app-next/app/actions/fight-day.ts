@@ -44,7 +44,10 @@ const settleSchema = z.object({
   bout_id: z.coerce.number().int().positive(),
   outcome: z.enum(["red", "blue", "draw", "no_contest"]),
   method: z.string().max(60).optional().default("Decision"),
-  round: z.coerce.number().int().min(1).max(20).optional(),
+  round: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : Number(v)),
+    z.number().int().min(1).max(20).optional(),
+  ),
   time: z.string().max(10).optional().default(""),
 });
 

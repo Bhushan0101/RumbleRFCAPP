@@ -26,7 +26,11 @@ export default async function RankingsPage() {
     }),
   ]);
 
+  const role = session?.user?.role ?? "";
   const signedIn = !!session?.user;
+  // Promoters, admins and ranking admins can see the full table.
+  // Fighters see the top 10 per division with a request button.
+  const canSeeFull = role === "promoter" || role === "admin" || role === "ranking_admin";
 
   const rows: RankingsFullRow[] = rankings.map((r) => ({
     id: r.id,
@@ -51,7 +55,11 @@ export default async function RankingsPage() {
         {rows.length === 0 ? (
           <EmptyState title="No rankings published yet." />
         ) : (
-          <RankingsFullTable rows={rows} signedIn={signedIn} />
+          <RankingsFullTable
+            rows={rows}
+            signedIn={signedIn}
+            canSeeFull={canSeeFull}
+          />
         )}
       </Container>
     </>

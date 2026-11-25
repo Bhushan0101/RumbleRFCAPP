@@ -40,6 +40,7 @@ model PortalUser {
   newsPosts         NewsPost[]
   deletionRequests  AccountDeletionRequest[] @relation("DeletionRequester")
   verifications     VerificationRequest[]    @relation("VerificationOwner")
+  passwordResets    PasswordReset[]
 
   @@map("portal_users")
 }
@@ -49,6 +50,18 @@ model Session {
   userId    Int
   expiresAt Int
   @@map("portal_sessions")
+}
+
+// Short-lived single-use token the user gets by email to reset their password.
+model PasswordReset {
+  token     String   @id
+  userId    Int
+  expiresAt Int       // unix seconds
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      PortalUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@map("password_resets")
 }
 
 // ---------------------------------------------------------------------------
@@ -67,6 +80,11 @@ model Athlete {
   biography    String?
   portraitUrl  String?
   cartoonUrl   String?
+  // Fighter-managed social handles. We store the raw handle/URL; render-side
+  // code builds the final profile URL via lib/socials.
+  instagramHandle String  @default("")
+  facebookUrl     String  @default("")
+  tiktokHandle    String  @default("")
   isSample     Int      @default(1)
   displayOrder Int      @default(0)
   classCode    String?  // 'J' | 'N' | 'L' | 'C' | 'B' | 'A'
@@ -87,8 +105,22 @@ model Athlete {
   audits     ApplicationAudit[]
   fightHistory FightHistory[]
   disciplines AthleteDiscipline[]
+  photos      FighterPhoto[]
 
   @@map("athletes")
+}
+
+// Fighter-uploaded photos that appear on their public profile.
+// Separate from Athlete.portraitUrl (single headshot / passport photo).
+model FighterPhoto {
+  id         Int      @id @default(autoincrement())
+  athleteId  Int
+  url        String
+  caption    String   @default("")
+  createdAt  DateTime @default(now())
+  athlete    Athlete  @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  @@index([athleteId])
+  @@map("fighter_photos")
 }
 
 // Per-discipline class + declared W-L-D. One row per (athlete, martialArt).
@@ -173,14 +205,72 @@ model Gym {
   status             String  @default("active")
   contactEmail       String  @default("")
 
+  // Detailed onboarding fields (collected from the token-gated onboarding form)
+  addressLine1        String  @default("")
+  eircode             String  @default("")
+  county              String  @default("")
+  yearEstablished     Int?
+  phone               String  @default("")
+  website             String  @default("")
+  socialLinks         String  @default("")     // free text / JSON blob
+  membersTotal        Int?
+  membersUnder18      Int?
+  disciplines         String  @default("")     // CSV
+  governingBody       String  @default("")
+
+  // Head coach snapshot (free text — Coach model stays as the login role)
+  coachName           String  @default("")
+  coachRank           String  @default("")
+  coachYearsTraining  Int?
+  coachStyle          String  @default("")
+  coachLastGradeYear  Int?
+  coachPhone          String  @default("")
+  coachEmail          String  @default("")
+  coachQualifications String  @default("")
+  coachYearsCoaching  Int?
+  coachCertifications String  @default("")
+  coachFirstAidExpiry String  @default("")     // ISO yyyy-mm-dd
+  coachSafeguarding   String  @default("")
+  coachGardaVetting   String  @default("")     // "verified 2024-02-01" etc.
+  coachPhotoUrl       String?
+
   owner      PortalUser?       @relation("GymOwner", fields: [ownerId], references: [id])
   coaches    Coach[]
   fighters   FighterProfile[]
   products   GymProduct[]
   classes    GymClass[]
   joinReqs   GymJoinRequest[]
+  photos     ClubPhoto[]
+  closures   GymClosureRequest[]
 
   @@map("gyms")
+}
+
+model ClubPhoto {
+  id        Int      @id @default(autoincrement())
+  gymId     Int
+  url       String
+  caption   String   @default("")
+  createdAt DateTime @default(now())
+  gym       Gym      @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  @@index([gymId])
+  @@map("club_photos")
+}
+
+// Gym-initiated withdrawal from WUCO. Admin reviews and processes; closing
+// the gym unlinks fighter profiles and flips the gym's status to 'withdrawn'.
+model GymClosureRequest {
+  id            Int      @id @default(autoincrement())
+  gymId         Int
+  requestedById Int?
+  reason        String   @default("")
+  status        String   @default("pending") // 'pending' | 'processed' | 'cancelled'
+  createdAt     DateTime @default(now())
+  processedAt   DateTime?
+  processedById Int?
+  gym           Gym        @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  @@index([status, createdAt(sort: Desc)])
+  @@map("gym_closure_requests")
 }
 
 model Coach {
@@ -275,6 +365,7 @@ model GymEnquiry {
   invitedBy    PortalUser?         @relation("Invited", fields: [invitedById], references: [id])
   reviewedBy   PortalUser?         @relation("Reviewed", fields: [reviewedById], references: [id])
   tokens       GymOnboardingToken[]
+  followups    GymEnquiryFollowup[]
   @@map("gym_enquiries")
 }
 
@@ -284,8 +375,27 @@ model GymOnboardingToken {
   createdAt DateTime @default(now())
   expiresAt Int
   usedAt    DateTime?
+  // When kind='followup', this token points the club at the Q&A page instead
+  // of the first-time onboarding form.
+  kind      String   @default("onboarding") // 'onboarding' | 'followup'
   enquiry   GymEnquiry @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
   @@map("gym_onboarding_tokens")
+}
+
+// Admin Q&A thread attached to a GymEnquiry — used when the admin needs
+// more info before approving. One row per question, answered inline by the
+// club via a signed followup link.
+model GymEnquiryFollowup {
+  id          Int      @id @default(autoincrement())
+  enquiryId   Int
+  askedById   Int?
+  question    String
+  answer      String   @default("")
+  askedAt     DateTime @default(now())
+  answeredAt  DateTime?
+  enquiry     GymEnquiry @relation(fields: [enquiryId], references: [id], onDelete: Cascade)
+  @@index([enquiryId])
+  @@map("gym_enquiry_followups")
 }
 
 // ---------------------------------------------------------------------------
@@ -327,11 +437,19 @@ model EventRegistration {
   id              Int      @id @default(autoincrement())
   eventId         Int
   athleteId       Int
-  addedById       Int
+  addedById       Int?
   createdAt       DateTime @default(now())
+  // 'interested' | 'offered' | 'accepted' | 'declined' | 'confirmed' | 'cancelled'
   status          String   @default("confirmed")
   registrationRef String?  @unique
   updatedAt       DateTime?
+  // Admin's offer details (populated when status transitions to 'offered').
+  offerNote       String   @default("")
+  offerOpponent   String   @default("")
+  offerDivision   String   @default("")
+  offerSection    String   @default("")
+  offerSentAt     DateTime?
+  respondedAt     DateTime?
   event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
   athlete         Athlete  @relation(fields: [athleteId], references: [id])
   @@unique([eventId, athleteId])

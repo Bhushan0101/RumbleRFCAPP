@@ -10,11 +10,17 @@ export function FighterProfileForm({
   initialNickname,
   initialCountry,
   initialBio,
+  initialInstagram,
+  initialFacebook,
+  initialTiktok,
 }: {
   initialName: string;
   initialNickname: string;
   initialCountry: string;
   initialBio: string;
+  initialInstagram: string;
+  initialFacebook: string;
+  initialTiktok: string;
 }) {
   const [state, action, pending] = useActionState(updateOwnProfile, initial);
   return (
@@ -46,6 +52,35 @@ export function FighterProfileForm({
           className="w-full px-4 py-3 bg-bg border border-border rounded-lg text-white focus:border-gold outline-none"
         />
       </label>
+
+      <fieldset className="border border-border rounded-xl p-4 space-y-3">
+        <legend className="font-display text-xs tracking-wider text-gold uppercase px-2">
+          Social links
+        </legend>
+        <p className="text-xs text-muted">
+          Handles or full profile URLs — shown as icon links on your public
+          fighter profile. Leave blank to hide.
+        </p>
+        <F
+          name="instagram_handle"
+          label="Instagram handle or URL"
+          defaultValue={initialInstagram}
+          placeholder="wucoireland"
+        />
+        <F
+          name="tiktok_handle"
+          label="TikTok handle or URL"
+          defaultValue={initialTiktok}
+          placeholder="wucoireland"
+        />
+        <F
+          name="facebook_url"
+          label="Facebook page or URL"
+          defaultValue={initialFacebook}
+          placeholder="wucoireland or https://www.facebook.com/…"
+        />
+      </fieldset>
+
       <p className="text-xs text-muted">
         Record (W-L-D), class and division are maintained by W.U.C.O admins. If
         they need updating, use Get Support in the user menu.
@@ -66,11 +101,13 @@ function F({
   label,
   defaultValue = "",
   required,
+  placeholder,
 }: {
   name: string;
   label: string;
   defaultValue?: string;
   required?: boolean;
+  placeholder?: string;
 }) {
   return (
     <label className="block">
@@ -81,6 +118,7 @@ function F({
         name={name}
         defaultValue={defaultValue}
         required={required}
+        placeholder={placeholder}
         className="w-full px-4 py-3 bg-bg border border-border rounded-lg text-white focus:border-gold outline-none"
       />
     </label>

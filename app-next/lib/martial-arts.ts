@@ -21,7 +21,14 @@ const KICKBOXING_CLASSES = [
   { id: "A", name: "A-Class (Seasoned pro)" },
 ] as const;
 
-const BOXING_MMA_CLASSES = [
+const BOXING_CLASSES = [
+  { id: "beginner_amateur",     name: "Beginner amateur" },
+  { id: "intermediate_amateur", name: "Intermediate amateur" },
+  { id: "semi_pro",             name: "Semi pro" },
+  { id: "pro",                  name: "Pro" },
+] as const;
+
+const MMA_CLASSES = [
   { id: "amateur",      name: "Amateur" },
   { id: "novice",       name: "Novice" },
   { id: "intermediate", name: "Intermediate" },
@@ -37,8 +44,8 @@ export function classesForMartialArt(
   switch (art) {
     case "kickboxing": return KICKBOXING_CLASSES;
     case "muay-thai":  return KICKBOXING_CLASSES;
-    case "boxing":     return BOXING_MMA_CLASSES;
-    case "mma":        return BOXING_MMA_CLASSES;
+    case "boxing":     return BOXING_CLASSES;
+    case "mma":        return MMA_CLASSES;
     default:           return [];
   }
 }

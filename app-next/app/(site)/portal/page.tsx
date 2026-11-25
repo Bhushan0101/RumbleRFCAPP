@@ -27,6 +27,7 @@ export default async function PortalPage() {
 
   if (session.user.role === "admin") return <AdminDashboard name={session.user.name ?? "Admin"} />;
   if (session.user.role === "ranking_admin") redirect("/portal/ranking");
+  if (session.user.role === "gym" || session.user.role === "coach") redirect("/portal/club");
 
   return <FighterDashboard userId={session.user.id!} name={session.user.name ?? "Member"} />;
 }
