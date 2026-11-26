@@ -46,6 +46,7 @@ export default async function EventPage({ params }: { params: Params }) {
     offerDivision: string;
     offerSection: string;
     offerNote: string;
+    raisedByGymId: number | null;
   } | null = null;
   if (session?.user?.id) {
     const profile = await prisma.fighterProfile.findFirst({
@@ -63,6 +64,7 @@ export default async function EventPage({ params }: { params: Params }) {
           offerDivision: true,
           offerSection: true,
           offerNote: true,
+          raisedByGymId: true,
         },
       });
       viewerRegistration = reg;
@@ -74,9 +76,20 @@ export default async function EventPage({ params }: { params: Params }) {
           offerDivision: "",
           offerSection: "",
           offerNote: "",
+          raisedByGymId: null,
         };
       }
     }
+  }
+  // Resolve the gym name that raised this interest, if any, so the fighter
+  // knows who's asking them to confirm.
+  let clubName: string | null = null;
+  if (viewerRegistration?.raisedByGymId) {
+    const gym = await prisma.gym.findUnique({
+      where: { id: viewerRegistration.raisedByGymId },
+      select: { name: true },
+    });
+    clubName = gym?.name ?? null;
   }
 
   return (
@@ -109,6 +122,7 @@ export default async function EventPage({ params }: { params: Params }) {
                 note: viewerRegistration.offerNote,
               }}
               eventPast={isPast}
+              clubName={clubName}
             />
           )}
           <section className="bg-surface border border-border rounded-2xl p-6">

@@ -6,7 +6,7 @@ import { Container } from "@/components/ui/container";
 import { PageHeader } from "@/components/site/page-header";
 import { FighterProfileForm } from "@/components/forms/fighter-profile-form";
 import { RequestCorrectionButton } from "@/components/forms/request-correction-button";
-import { PortraitForm } from "@/components/forms/portrait-form";
+import { PortraitCardControls } from "@/components/forms/portrait-card-controls";
 import { FighterGalleryForm } from "@/components/forms/fighter-gallery-form";
 import { InjuriesForm } from "@/components/forms/injuries-form";
 import { VerificationRequestsPanel } from "@/components/forms/verification-requests-panel";
@@ -15,6 +15,7 @@ import { Trophy, QrCode } from "lucide-react";
 import { martialArtName, classDisplayName, martialArtRequiresClass } from "@/lib/martial-arts";
 import { divisionDisplayName } from "@/lib/divisions";
 import { completenessScore, completenessSteps } from "@/lib/completeness";
+import { respondToClubInvite } from "@/app/actions/club";
 
 export const metadata = { title: "My profile" };
 
@@ -40,8 +41,28 @@ export default async function MyProfilePage() {
           },
         },
       },
+      gym: true,
     },
   });
+
+  // Inbound club invites (approved fighters only; pending_approval users can't
+  // belong to a club anyway).
+  const clubInvites = profile
+    ? await prisma.clubFighterInvite.findMany({
+        where: { athleteId: profile.athleteId, status: "pending" },
+        include: { gym: { select: { id: true, name: true, city: true } } },
+        orderBy: { createdAt: "desc" },
+      })
+    : [];
+
+  // Outbound join requests (fighter → club) that haven't been resolved yet.
+  const pendingJoinRequests = profile
+    ? await prisma.gymJoinRequest.findMany({
+        where: { userId: session.user.id, status: "pending" },
+        include: { gym: { select: { id: true, name: true, slug: true, city: true } } },
+        orderBy: { createdAt: "desc" },
+      })
+    : [];
 
   if (!profile) {
     return (
@@ -64,25 +85,28 @@ export default async function MyProfilePage() {
   const isApproved = profile.approvalStatus === "approved";
   const hasPortrait = !!profile.athlete.portraitUrl;
   const injuryAnswered = !!profile.injuryAnsweredAt;
-  const hasFightHistoryEntry = profile.athlete.fightHistory.length > 0;
+  const hasSocialLink =
+    !!profile.athlete.instagramHandle ||
+    !!profile.athlete.facebookUrl ||
+    !!profile.athlete.tiktokHandle;
   const score = completenessScore({
     approved: isApproved,
     hasPortrait,
     injuryAnswered,
-    hasFightHistoryEntry,
+    hasSocialLink,
   });
   const steps = completenessSteps({
     approved: isApproved,
     hasPortrait,
     injuryAnswered,
-    hasFightHistoryEntry,
+    hasSocialLink,
   });
 
   return (
     <>
       <PageHeader eyebrow="Member" title="My profile">
         Keep your profile up to date. Approved baseline is 50% — add a photo,
-        injury info and fight history to reach 100%.
+        injury info and a social link to reach 100%.
       </PageHeader>
       <Container className="py-10">
         <Link
@@ -130,13 +154,22 @@ export default async function MyProfilePage() {
                 {profile.athlete.passport?.fighterNo ?? "— pending —"}
               </p>
               <div className="my-4 h-px bg-gold/30" />
-              {profile.athlete.portraitUrl && (
+              {profile.athlete.portraitUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img
                   src={profile.athlete.portraitUrl}
                   alt=""
                   className="w-full aspect-[4/5] object-cover rounded-xl mb-3 border border-gold/30"
                 />
+              ) : (
+                <div className="w-full aspect-[4/5] bg-black/40 border border-dashed border-gold/40 rounded-xl mb-3 grid place-items-center">
+                  <span className="font-display text-6xl text-muted/60">
+                    {profile.athlete.name[0]?.toUpperCase()}
+                  </span>
+                </div>
+              )}
+              {isApproved && (
+                <PortraitCardControls hasPortrait={hasPortrait} />
               )}
               <p className="font-display text-xl text-white tracking-wider">
                 {profile.athlete.name}
@@ -221,6 +254,126 @@ export default async function MyProfilePage() {
           </aside>
 
           <div className="space-y-6">
+            {clubInvites.length > 0 && (
+              <section className="bg-surface border-2 border-gold/60 rounded-2xl p-5 md:p-6">
+                <h2 className="font-display text-xl text-white tracking-wider mb-2">
+                  Club invites ({clubInvites.length})
+                </h2>
+                <p className="text-xs text-muted mb-4">
+                  A club has invited you to affiliate. Accepting links your
+                  W.U.C.O profile to that club.
+                </p>
+                <ul className="divide-y divide-border/60">
+                  {clubInvites.map((inv) => (
+                    <li key={inv.id} className="py-3 flex flex-wrap items-center gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-display text-sm text-white tracking-wider">
+                          {inv.gym.name}
+                          {inv.gym.city && (
+                            <span className="ml-2 text-[11px] text-muted font-sans tracking-normal">
+                              · {inv.gym.city}
+                            </span>
+                          )}
+                        </p>
+                        {inv.note && (
+                          <p className="text-xs text-white/80 mt-1 whitespace-pre-wrap">
+                            “{inv.note}”
+                          </p>
+                        )}
+                      </div>
+                      <form action={respondToClubInvite} className="flex gap-2">
+                        <input type="hidden" name="invite_id" value={inv.id} />
+                        <input type="hidden" name="decision" value="accept" />
+                        <button
+                          type="submit"
+                          className="bg-emerald text-white px-3 py-1.5 text-xs font-display tracking-wider hover:bg-emerald-hi rounded"
+                        >
+                          ACCEPT
+                        </button>
+                      </form>
+                      <form action={respondToClubInvite} className="flex gap-2">
+                        <input type="hidden" name="invite_id" value={inv.id} />
+                        <input type="hidden" name="decision" value="decline" />
+                        <button
+                          type="submit"
+                          className="border border-red-500 text-red-200 px-3 py-1.5 text-xs font-display tracking-wider hover:bg-red-500 hover:text-white rounded"
+                        >
+                          DECLINE
+                        </button>
+                      </form>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {isApproved && (
+              <section className="bg-surface border border-border rounded-2xl p-5 md:p-6">
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div>
+                    <h2 className="font-display text-xl text-white tracking-wider">
+                      Your club
+                    </h2>
+                    <p className="text-xs text-muted mt-1">
+                      Your gym affiliation on W.U.C.O. You can change this any
+                      time.
+                    </p>
+                  </div>
+                  <Link
+                    href="/clubs"
+                    className="shrink-0 text-xs text-gold font-display tracking-wider underline hover:text-gold-hi"
+                  >
+                    Browse clubs →
+                  </Link>
+                </div>
+                {profile.gym ? (
+                  <div className="flex items-center justify-between gap-3 border border-border rounded-lg px-4 py-3">
+                    <div>
+                      <p className="font-display text-white tracking-wider">
+                        {profile.gym.name}
+                      </p>
+                      {profile.gym.city && (
+                        <p className="text-[11px] text-muted mt-0.5">
+                          {profile.gym.city}
+                        </p>
+                      )}
+                    </div>
+                    {profile.gym.slug && (
+                      <Link
+                        href={`/clubs/${profile.gym.slug}`}
+                        className="text-[11px] text-gold hover:underline"
+                      >
+                        view ↗
+                      </Link>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted border border-dashed border-border rounded-lg px-4 py-3">
+                    You&apos;re not affiliated with a club yet. Browse clubs and
+                    ask to join — the club admin approves.
+                  </p>
+                )}
+                {pendingJoinRequests.length > 0 && (
+                  <div className="mt-3">
+                    <p className="font-display text-[10px] tracking-wider text-gold uppercase mb-1">
+                      Awaiting club approval
+                    </p>
+                    <ul className="space-y-1 text-xs text-white/80">
+                      {pendingJoinRequests.map((r) => (
+                        <li key={r.id}>
+                          {r.gym.name}
+                          {r.gym.city ? ` · ${r.gym.city}` : ""}
+                          <span className="ml-2 text-[10px] font-display tracking-wider text-gold uppercase">
+                            Pending
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </section>
+            )}
+
             <section className="bg-surface border border-border rounded-2xl p-6">
               <h2 className="font-display text-2xl text-white tracking-wider mb-5">
                 Edit your details
@@ -238,17 +391,6 @@ export default async function MyProfilePage() {
 
             {isApproved && (
               <>
-                <section className="bg-surface border border-border rounded-2xl p-6">
-                  <h2 className="font-display text-2xl text-white tracking-wider mb-2">
-                    Profile photo
-                  </h2>
-                  <p className="text-xs text-muted mb-5">
-                    Upload a photo from your device or camera. Shows on your
-                    passport and public pages.
-                  </p>
-                  <PortraitForm initialUrl={profile.athlete.portraitUrl ?? ""} />
-                </section>
-
                 <section className="bg-surface border border-border rounded-2xl p-6">
                   <h2 className="font-display text-2xl text-white tracking-wider mb-2">
                     Photo gallery

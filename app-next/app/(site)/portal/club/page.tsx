@@ -5,10 +5,22 @@ import { prisma } from "@/lib/prisma";
 import { Container } from "@/components/ui/container";
 import { PageHeader } from "@/components/site/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
-import { reviewClubJoinRequest } from "@/app/actions/club";
+import { reviewClubJoinRequest, cancelClubInvite } from "@/app/actions/club";
 import { ClubGalleryForm } from "@/components/forms/club-gallery-form";
 import { ClubCoachForm } from "@/components/forms/club-coach-form";
 import { ClubWithdrawForm } from "@/components/forms/club-withdraw-form";
+import { ClubTimetableImageForm } from "@/components/forms/club-timetable-image-form";
+import { ClubClassesForm, type GymClassRow } from "@/components/forms/club-classes-form";
+import { ClubPassesForm, type GymProductRow } from "@/components/forms/club-passes-form";
+import {
+  ClubInviteFighterForm,
+  type FighterSearchOption,
+} from "@/components/forms/club-invite-fighter-form";
+import {
+  ClubEventInterestForm,
+  type ClubMemberOption,
+  type ClubEventOption,
+} from "@/components/forms/club-event-interest-form";
 import { martialArtName, classDisplayName, martialArtRequiresClass } from "@/lib/martial-arts";
 import { divisionDisplayName } from "@/lib/divisions";
 
@@ -49,6 +61,8 @@ export default async function ClubPortalPage() {
         orderBy: { createdAt: "desc" },
       },
       photos: { orderBy: { createdAt: "desc" } },
+      classes: { orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }] },
+      products: { orderBy: { id: "asc" } },
       closures: {
         where: { status: "pending" },
         select: { id: true },
@@ -73,6 +87,54 @@ export default async function ClubPortalPage() {
 
   const pendingReqs = gym.joinReqs.filter((r) => r.status === "pending");
   const pastReqs = gym.joinReqs.filter((r) => r.status !== "pending");
+
+  // Data for the "invite a fighter" and "raise event interest" sections.
+  const [allFighters, pendingInvites, upcomingEvents] = await Promise.all([
+    prisma.athlete.findMany({
+      where: { profile: { approvalStatus: "approved" } },
+      include: {
+        profile: { include: { gym: { select: { name: true } } } },
+        passport: true,
+        disciplines: true,
+      },
+      orderBy: { name: "asc" },
+    }),
+    prisma.clubFighterInvite.findMany({
+      where: { gymId: gym.id, status: "pending" },
+      include: { athlete: true },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.event.findMany({
+      where: { status: { not: "Past" } },
+      select: { id: true, title: true, startsAt: true },
+      orderBy: { startsAt: "asc" },
+      take: 20,
+    }),
+  ]);
+
+  // Only offer to invite fighters not already on this club.
+  const inviteCandidates: FighterSearchOption[] = allFighters
+    .filter((a) => a.profile?.gymId !== gym.id)
+    .map((a) => {
+      const primary = a.disciplines.find((d) => d.isPrimary === 1) ?? a.disciplines[0];
+      return {
+        id: a.id,
+        name: a.name,
+        fighterNo: a.passport?.fighterNo ?? null,
+        division: a.division ?? "",
+        martialArt: primary?.martialArt ?? a.martialArt ?? "",
+        gymName: a.profile?.gym?.name ?? null,
+      };
+    });
+
+  const members: ClubMemberOption[] = gym.fighters
+    .filter((f) => f.approvalStatus === "approved")
+    .map((f) => ({ id: f.athlete.id, name: f.athlete.name }));
+  const events: ClubEventOption[] = upcomingEvents.map((e) => ({
+    id: e.id,
+    title: e.title,
+    startsAt: e.startsAt ?? null,
+  }));
 
   // Flatten every ranked athlete at this club into one list.
   const rankedRows: {
@@ -201,6 +263,62 @@ export default async function ClubPortalPage() {
               </ul>
             </details>
           )}
+        </section>
+
+        {/* --- Invite a fighter to join the club -------------------- */}
+        <section className="bg-surface border border-gold/40 rounded-xl p-5">
+          <header className="mb-3">
+            <h2 className="font-display text-lg text-white tracking-wider">
+              Invite a fighter
+            </h2>
+            <p className="text-xs text-muted mt-1">
+              Search approved fighters and send an invite to affiliate with
+              {" "}{gym.name}. They&apos;ll appear here once they accept.
+            </p>
+          </header>
+          <ClubInviteFighterForm fighters={inviteCandidates} />
+          {pendingInvites.length > 0 && (
+            <div className="mt-4 border-t border-border pt-3">
+              <p className="font-display text-[10px] tracking-wider text-gold uppercase mb-2">
+                Pending invites ({pendingInvites.length})
+              </p>
+              <ul className="divide-y divide-border/60">
+                {pendingInvites.map((i) => (
+                  <li key={i.id} className="py-2 flex items-center gap-3 text-sm">
+                    <span className="flex-1 text-white">
+                      {i.athlete.name}
+                      <span className="block text-[11px] text-muted">
+                        sent {i.createdAt.toISOString().slice(0, 10)}
+                      </span>
+                    </span>
+                    <form action={cancelClubInvite}>
+                      <input type="hidden" name="invite_id" value={i.id} />
+                      <button
+                        type="submit"
+                        className="text-[11px] text-red-400 hover:text-red-300 underline"
+                      >
+                        cancel
+                      </button>
+                    </form>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
+
+        {/* --- Raise event interest on a fighter's behalf ----------- */}
+        <section className="bg-surface border border-gold/40 rounded-xl p-5">
+          <header className="mb-3">
+            <h2 className="font-display text-lg text-white tracking-wider">
+              Raise event interest
+            </h2>
+            <p className="text-xs text-muted mt-1">
+              Flag one of your fighters for an upcoming event. The fighter
+              must confirm before the W.U.C.O admin sees the interest.
+            </p>
+          </header>
+          <ClubEventInterestForm members={members} events={events} />
         </section>
 
         {/* --- Fighters affiliated with the club ---------------------- */}
@@ -338,6 +456,85 @@ export default async function ClubPortalPage() {
             </ul>
           )}
         </section>
+
+        {/* --- Timetable + classes + passes (active clubs only) ------- */}
+        {gym.status === "active" ? (
+          <>
+            <section className="bg-surface border border-border rounded-xl p-5">
+              <header className="mb-4">
+                <h2 className="font-display text-lg text-white tracking-wider">
+                  Weekly timetable image
+                </h2>
+                <p className="text-xs text-muted mt-1">
+                  Shows at the top of your public club page. Use the
+                  structured class list below for bookings.
+                </p>
+              </header>
+              <ClubTimetableImageForm
+                initialUrl={gym.timetableImageUrl ?? ""}
+              />
+            </section>
+
+            <section className="bg-surface border border-border rounded-xl p-5">
+              <header className="mb-4">
+                <h2 className="font-display text-lg text-white tracking-wider">
+                  Weekly classes
+                </h2>
+                <p className="text-xs text-muted mt-1">
+                  Each class becomes a bookable slot on your public page.
+                </p>
+              </header>
+              <ClubClassesForm
+                classes={gym.classes.map<GymClassRow>((c) => ({
+                  id: c.id,
+                  title: c.title,
+                  discipline: c.discipline,
+                  dayOfWeek: c.dayOfWeek,
+                  startTime: c.startTime,
+                  durationMinutes: c.durationMinutes,
+                  capacity: c.capacity,
+                  perClassPriceCents: c.perClassPriceCents ?? null,
+                  revolutUrl: c.revolutUrl,
+                  colour: c.colour,
+                }))}
+              />
+            </section>
+
+            <section className="bg-surface border border-border rounded-xl p-5">
+              <header className="mb-4">
+                <h2 className="font-display text-lg text-white tracking-wider">
+                  Passes &amp; pricing
+                </h2>
+                <p className="text-xs text-muted mt-1">
+                  Day / week / month passes and per-class drop-in. Add a
+                  Revolut URL on each to accept payments.
+                </p>
+              </header>
+              <ClubPassesForm
+                products={gym.products.map<GymProductRow>((p) => ({
+                  id: p.id,
+                  kind: p.kind,
+                  title: p.title,
+                  priceCents: p.priceCents,
+                  revolutUrl: p.revolutUrl,
+                  active: p.active,
+                }))}
+              />
+            </section>
+          </>
+        ) : (
+          <section className="bg-surface border border-gold/40 rounded-xl p-5">
+            <h2 className="font-display text-lg text-white tracking-wider mb-2">
+              Timetable &amp; bookings
+            </h2>
+            <p className="text-xs text-muted">
+              Your club is {gym.status.replace("_", " ")}. Once a W.U.C.O admin
+              approves your club onto the federation, this section unlocks and
+              you can upload a timetable image, add structured classes, and
+              configure passes.
+            </p>
+          </section>
+        )}
 
         {/* --- Head coach profile ------------------------------------ */}
         <section className="bg-surface border border-border rounded-xl p-5">

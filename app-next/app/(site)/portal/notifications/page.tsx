@@ -4,13 +4,23 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { Container } from "@/components/ui/container";
 import { PageHeader } from "@/components/site/page-header";
-import { markAllNotificationsRead } from "@/app/actions/notifications";
 
 export const metadata = { title: "Notifications" };
+// Visiting this page marks notifications read, so it must run on every hit.
+export const dynamic = "force-dynamic";
 
 export default async function NotificationsPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/portal/sign-in");
+
+  // Mark every unread notification read the moment the page loads. The
+  // header's bell count re-queries on every request (SiteHeader is dynamic),
+  // so the badge drops to 0 on the next navigation without us having to
+  // revalidate anything from inside this render.
+  await prisma.notification.updateMany({
+    where: { userId: session.user.id, readAt: null },
+    data: { readAt: new Date() },
+  });
 
   const notifications = await prisma.notification.findMany({
     where: { userId: session.user.id },
@@ -18,14 +28,10 @@ export default async function NotificationsPage() {
     take: 100,
   });
 
-  const unread = notifications.filter((n) => !n.readAt).length;
-
   return (
     <>
       <PageHeader eyebrow="Alerts" title="Notifications">
-        {unread > 0
-          ? `${unread} unread ${unread === 1 ? "update" : "updates"}.`
-          : "You're all caught up."}
+        You&apos;re all caught up.
       </PageHeader>
       <Container className="py-10 space-y-4">
         <div className="flex items-center justify-between">
@@ -35,16 +41,6 @@ export default async function NotificationsPage() {
           >
             ← Back to portal
           </Link>
-          {unread > 0 && (
-            <form action={markAllNotificationsRead}>
-              <button
-                type="submit"
-                className="text-xs text-gold hover:underline"
-              >
-                Mark all as read
-              </button>
-            </form>
-          )}
         </div>
 
         {notifications.length === 0 ? (
@@ -58,16 +54,7 @@ export default async function NotificationsPage() {
                 <>
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
-                      <p
-                        className={`text-sm ${
-                          n.readAt ? "text-muted" : "text-white font-medium"
-                        }`}
-                      >
-                        {!n.readAt && (
-                          <span className="inline-block w-2 h-2 rounded-full bg-gold mr-2 align-middle" />
-                        )}
-                        {n.title}
-                      </p>
+                      <p className="text-sm text-muted">{n.title}</p>
                       {n.body && (
                         <p className="text-xs text-muted mt-1">{n.body}</p>
                       )}

@@ -177,8 +177,10 @@ const registerSchema = z
       .regex(/^\d{4}-\d{2}-\d{2}$/)
       .optional()
       .or(z.literal("")),
-    record_note: z.string().max(2000).optional().default(""),
-    gym_name: z.string().min(1, "Enter your gym name.").max(200),
+    // Club picker: either an existing Gym id (as a stringified int) or the
+    // literal "new" when the fighter types a name we don't have yet.
+    gym_choice: z.string().min(1, "Pick your gym."),
+    gym_name_new: z.string().max(200).optional().default(""),
     coach_name: z.string().min(1, "Enter your coach's name.").max(200),
     // Required acknowledgements from the review step. Checkbox value is "on"
     // when ticked, missing otherwise — a mismatch makes the whole submit fail.
@@ -238,6 +240,21 @@ const registerSchema = z
         message: "Pick a country from the list.",
       });
     }
+    // Club picker: either an int gym id or the sentinel "new" with a name.
+    if (data.gym_choice !== "new" && !/^\d+$/.test(data.gym_choice)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["gym_choice"],
+        message: "Pick your gym from the list.",
+      });
+    }
+    if (data.gym_choice === "new" && !data.gym_name_new.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["gym_name_new"],
+        message: "Type your gym's name.",
+      });
+    }
   });
 
 export async function registerFighter(
@@ -257,6 +274,28 @@ export async function registerFighter(
   const existing = await prisma.portalUser.findUnique({ where: { email } });
   if (existing) {
     return { ok: false, message: "An account with that email already exists." };
+  }
+  // Resolve club picker to an existing Gym row (if any). Picker is either an
+  // int id of an active gym, or the sentinel "new" with gym_name_new text.
+  let selectedGymId: number | null = null;
+  let selectedGymName = "";
+  if (d.gym_choice !== "new") {
+    const gymId = Number(d.gym_choice);
+    const gym = await prisma.gym.findFirst({
+      where: { id: gymId, status: "active" },
+      select: { id: true, name: true },
+    });
+    if (!gym) {
+      return {
+        ok: false,
+        message: "Please correct the form.",
+        errors: { gym_choice: ["Pick your gym from the list."] },
+      };
+    }
+    selectedGymId = gym.id;
+    selectedGymName = gym.name;
+  } else {
+    selectedGymName = d.gym_name_new.trim();
   }
   const { salt, hash } = await hashPassword(d.password);
   const name = `${d.first_name} ${d.last_name}`.trim();
@@ -307,12 +346,9 @@ export async function registerFighter(
         legacyMember: 0,
         createdById: user.id,
         reviewNote: [
-          `Gym: ${d.gym_name}`,
+          `Gym: ${selectedGymName}${selectedGymId ? ` (#${selectedGymId})` : " (not on WUCO yet)"}`,
           `Coach: ${d.coach_name}`,
-          d.record_note ? `Record note: ${d.record_note}` : "",
-        ]
-          .filter(Boolean)
-          .join(" · "),
+        ].join(" · "),
       },
     });
     const auditLines = d.disciplines
@@ -326,9 +362,25 @@ export async function registerFighter(
         athleteId: athlete.id,
         actorId: user.id,
         action: "submitted",
-        note: `Declared records → ${auditLines}. Gym: ${d.gym_name}. Coach: ${d.coach_name}. ${d.record_note ?? ""}`.trim(),
+        note: `Declared records → ${auditLines}. Gym: ${selectedGymName}. Coach: ${d.coach_name}.`.trim(),
       },
     });
+    // If they picked an existing WUCO club, queue a join request now so the
+    // club admin sees it immediately after we approve the fighter.
+    if (selectedGymId) {
+      await tx.gymJoinRequest.upsert({
+        where: {
+          gymId_userId: { gymId: selectedGymId, userId: user.id },
+        },
+        update: { status: "pending", reviewNote: "Selected at registration" },
+        create: {
+          gymId: selectedGymId,
+          userId: user.id,
+          status: "pending",
+          reviewNote: "Selected at registration",
+        },
+      });
+    }
   });
   void newAthleteId;
   const divisionName = divisionDisplayName(d.gender, d.division);
@@ -345,7 +397,7 @@ export async function registerFighter(
   await sendMail({
     to: MAIL_ADMIN,
     subject: `New fighter signup: ${name}`,
-    body: `${name} <${email}> has registered.\nGym: ${d.gym_name}\nCoach: ${d.coach_name}\nDivision: ${divisionName}\nDisciplines:\n${disciplineLines}${d.record_note ? `\nRecord notes: ${d.record_note}` : ""}\n\nReview in the admin portal.`,
+    body: `${name} <${email}> has registered.\nGym: ${selectedGymName}${selectedGymId ? "" : " (not on WUCO yet — follow up)"}\nCoach: ${d.coach_name}\nDivision: ${divisionName}\nDisciplines:\n${disciplineLines}\n\nReview in the admin portal.`,
     category: "fighter_signup",
   });
   await sendMail({

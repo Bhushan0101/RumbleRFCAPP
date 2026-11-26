@@ -32,6 +32,7 @@ model PortalUser {
   promotions        Promotion[]
   joinRequests      GymJoinRequest[]      @relation("Fighter")
   reviewedJoins     GymJoinRequest[]      @relation("Reviewer")
+  clubInvitesSent   ClubFighterInvite[]   @relation("ClubInviteSender")
   bookings          ClassBooking[]
   applicationAudit  ApplicationAudit[]
   invitedEnquiries  GymEnquiry[]          @relation("Invited")
@@ -41,6 +42,10 @@ model PortalUser {
   deletionRequests  AccountDeletionRequest[] @relation("DeletionRequester")
   verifications     VerificationRequest[]    @relation("VerificationOwner")
   passwordResets    PasswordReset[]
+  rankingRequests   RankingAccessRequest[]   @relation("RankingRequester")
+  rankingReviewed   RankingAccessRequest[]   @relation("RankingReviewer")
+  rankingShareTokens        RankingShareToken[] @relation("RankingShareTarget")
+  rankingShareTokensCreated RankingShareToken[] @relation("RankingShareCreator")
 
   @@map("portal_users")
 }
@@ -106,6 +111,7 @@ model Athlete {
   fightHistory FightHistory[]
   disciplines AthleteDiscipline[]
   photos      FighterPhoto[]
+  clubInvites ClubFighterInvite[]
 
   @@map("athletes")
 }
@@ -240,6 +246,7 @@ model Gym {
   products   GymProduct[]
   classes    GymClass[]
   joinReqs   GymJoinRequest[]
+  invites    ClubFighterInvite[]
   photos     ClubPhoto[]
   closures   GymClosureRequest[]
 
@@ -347,6 +354,26 @@ model GymJoinRequest {
   @@map("gym_join_requests")
 }
 
+// Club-initiated invite: a gym owner invites an approved fighter to join.
+// Fighter must accept before FighterProfile.gymId is populated.
+model ClubFighterInvite {
+  id          Int      @id @default(autoincrement())
+  gymId       Int
+  athleteId   Int
+  invitedById Int
+  // 'pending' | 'accepted' | 'declined' | 'cancelled'
+  status      String   @default("pending")
+  note        String   @default("")
+  createdAt   DateTime @default(now())
+  respondedAt DateTime?
+  gym         Gym        @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  athlete     Athlete    @relation(fields: [athleteId], references: [id], onDelete: Cascade)
+  invitedBy   PortalUser @relation("ClubInviteSender", fields: [invitedById], references: [id], onDelete: Cascade)
+  @@unique([gymId, athleteId])
+  @@index([athleteId, status])
+  @@map("club_fighter_invites")
+}
+
 model GymEnquiry {
   id           Int      @id @default(autoincrement())
   createdAt    DateTime @default(now())
@@ -450,9 +477,17 @@ model EventRegistration {
   offerSection    String   @default("")
   offerSentAt     DateTime?
   respondedAt     DateTime?
+  // Two-sided confirmation: when both paired rows reach 'accepted' we set
+  // confirmedAt + flip both to 'confirmed'. boutRef links the two sides.
+  confirmedAt     DateTime?
+  boutRef         String?
+  // Set when a club raised this interest on behalf of one of its fighters;
+  // the fighter still has to confirm before admin sees it as interested.
+  raisedByGymId   Int?
   event           Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
   athlete         Athlete  @relation(fields: [athleteId], references: [id])
   @@unique([eventId, athleteId])
+  @@index([boutRef])
   @@map("event_registrations")
 }
 
@@ -613,4 +648,42 @@ model VerificationRequest {
   @@index([userId, createdAt(sort: Desc)])
   @@index([status, createdAt(sort: Desc)])
   @@map("verification_requests")
+}
+
+// Fighter-initiated: "please let me view rankings outside my own division".
+// Admin fulfills by minting a RankingShareToken and emailing the fighter a
+// signed link; the request row is then resolved.
+model RankingAccessRequest {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  // 'full' for every division; room for 'division:<id>' later.
+  scope        String   @default("full")
+  note         String   @default("")
+  status       String   @default("pending") // 'pending' | 'resolved' | 'rejected'
+  createdAt    DateTime @default(now())
+  resolvedAt   DateTime?
+  resolvedById Int?
+  shareToken   String?
+  user         PortalUser  @relation("RankingRequester", fields: [userId], references: [id], onDelete: Cascade)
+  resolvedBy   PortalUser? @relation("RankingReviewer", fields: [resolvedById], references: [id], onDelete: SetNull)
+  @@index([status, createdAt(sort: Desc)])
+  @@index([userId])
+  @@map("ranking_access_requests")
+}
+
+// Signed link minted by admin so the recipient can view the full rankings
+// without an account for a bounded window (default 24h).
+model RankingShareToken {
+  token       String   @id
+  userId      Int
+  createdById Int
+  expiresAt   Int      // unix seconds
+  createdAt   DateTime @default(now())
+  revokedAt   DateTime?
+  scope       String   @default("full")
+  user        PortalUser @relation("RankingShareTarget", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy   PortalUser @relation("RankingShareCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("ranking_share_tokens")
 }

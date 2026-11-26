@@ -29,8 +29,19 @@ export default async function RankingsPage() {
   const role = session?.user?.role ?? "";
   const signedIn = !!session?.user;
   // Promoters, admins and ranking admins can see the full table.
-  // Fighters see the top 10 per division with a request button.
+  // Fighters see the top 10 of ONLY their own division; everything else is
+  // hidden behind a "request more divisions" CTA.
   const canSeeFull = role === "promoter" || role === "admin" || role === "ranking_admin";
+
+  // Resolve the signed-in fighter's own division so we can scope their view.
+  let fighterDivision: string | null = null;
+  if (signedIn && role === "fighter") {
+    const profile = await prisma.fighterProfile.findFirst({
+      where: { userId: Number(session!.user!.id) },
+      include: { athlete: true },
+    });
+    fighterDivision = profile?.athlete?.division ?? null;
+  }
 
   const rows: RankingsFullRow[] = rankings.map((r) => ({
     id: r.id,
@@ -59,6 +70,7 @@ export default async function RankingsPage() {
             rows={rows}
             signedIn={signedIn}
             canSeeFull={canSeeFull}
+            fighterDivision={fighterDivision}
           />
         )}
       </Container>

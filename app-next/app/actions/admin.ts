@@ -658,3 +658,96 @@ export async function closeGym(formData: FormData) {
   revalidatePath("/clubs");
   if (gym.slug) revalidatePath(`/clubs/${gym.slug}`);
 }
+
+// Admin mints a 24-hour share link so the requester can view the full
+// rankings without a role upgrade. The link is emailed to the requester and
+// the RankingAccessRequest row is marked resolved.
+export async function shareRankingsWithUser(formData: FormData) {
+  const session = await auth();
+  if (
+    session?.user?.role !== "admin" &&
+    session?.user?.role !== "ranking_admin"
+  ) {
+    throw new Error("Forbidden");
+  }
+  const requestId = Number(formData.get("request_id"));
+  if (!requestId) throw new Error("Missing request id.");
+  const scopeIn = String(formData.get("scope") ?? "").trim();
+  // "full" shares every division; anything else is treated as a division id
+  // (free-text so new divisions don't require code changes).
+  const scope = scopeIn && scopeIn !== "full" ? scopeIn : "full";
+  const req = await prisma.rankingAccessRequest.findUnique({
+    where: { id: requestId },
+    include: { user: true },
+  });
+  if (!req || req.status !== "pending") {
+    throw new Error("Request not found or already resolved.");
+  }
+
+  const token = randomBase64Url(32);
+  const now = Date.now();
+  const expiresAt = Math.floor(now / 1000) + 24 * 60 * 60; // 24 hours
+  await prisma.$transaction(async (tx) => {
+    await tx.rankingShareToken.create({
+      data: {
+        token,
+        userId: req.userId,
+        createdById: Number(session.user.id),
+        expiresAt,
+        scope,
+      },
+    });
+    await tx.rankingAccessRequest.update({
+      where: { id: req.id },
+      data: {
+        status: "resolved",
+        resolvedAt: new Date(),
+        resolvedById: Number(session.user.id),
+        shareToken: token,
+        scope,
+      },
+    });
+  });
+
+  const url = `${SITE_URL}/rankings/share/${token}`;
+  const expiryHuman = new Date(expiresAt * 1000).toUTCString();
+  const scopeLine =
+    scope === "full"
+      ? "This link shows the full national rankings (every division)."
+      : `This link shows the ${scope} rankings only.`;
+  await sendMail({
+    to: req.user.email,
+    subject: "W.U.C.O: your rankings access link",
+    body:
+      `Hi ${req.user.name},\n\n` +
+      `A W.U.C.O admin has shared the rankings with you.\n\n` +
+      `${scopeLine}\n\n` +
+      `View the rankings: ${url}\n\n` +
+      `This link is valid for 24 hours — it expires on ${expiryHuman}.\n\n` +
+      `— W.U.C.O Ireland`,
+    category: "fighter_signup",
+  });
+
+  revalidatePath("/portal/admin/ranking-requests");
+}
+
+export async function rejectRankingsRequest(formData: FormData) {
+  const session = await auth();
+  if (
+    session?.user?.role !== "admin" &&
+    session?.user?.role !== "ranking_admin"
+  ) {
+    throw new Error("Forbidden");
+  }
+  const requestId = Number(formData.get("request_id"));
+  if (!requestId) throw new Error("Missing request id.");
+  await prisma.rankingAccessRequest.updateMany({
+    where: { id: requestId, status: "pending" },
+    data: {
+      status: "rejected",
+      resolvedAt: new Date(),
+      resolvedById: Number(session.user.id),
+    },
+  });
+  revalidatePath("/portal/admin/ranking-requests");
+}

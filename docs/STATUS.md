@@ -1,9 +1,50 @@
 # W.U.C.O Ireland — Status
 
-_Last updated: 2026-10-24_
+_Last updated: 2026-11-26_
 
 A living document of what's shipped, what's planned, and what's parked.
-This file is intentionally kept short — see `docs/` for deep dives.
+This file is intentionally kept short — see `docs/` for deep dives. The
+authoritative walkthrough of every fighter + admin + club action is at
+[docs/WUCO_WORKFLOWS.md](WUCO_WORKFLOWS.md).
+
+---
+
+## What shipped on 2026-11-26
+
+**Registration & profile**
+- `/register` 4-step wizard uses a **club picker** (active WUCO gyms + free-text fallback). Picking an existing club queues a `GymJoinRequest` so the club sees the fighter after admin approval.
+- W-L-D per discipline restored on step 3 (primary mirrors to `Athlete`).
+- Profile **completeness** now scores "Social link added" (any of IG/FB/TikTok) instead of "fight history entry". Weight unchanged.
+- Profile card has an **inline portrait uploader** — Add / Change / Remove right under the photo slot (new `removePortrait` server action).
+
+**Rankings**
+- Signed-in fighters see only the **top 10 of their own division**.
+- "Request more rankings" → persists a `RankingAccessRequest`, notifies admin.
+- Admin page `/portal/admin/ranking-requests` opens a **modal** (scope = Full or specific division) → **Share (24h) →** mints a `RankingShareToken` and emails the signed link.
+- Public `/rankings/share/[token]` renders the scoped rankings for 24h.
+
+**Bouts**
+- Admin "Add bout" flow is **gender → division → red → blue** filter chain (`AdminAddBoutForm`).
+- Bouts are **two-sided**: paired `EventRegistration` rows share a `boutRef`; both fighters must accept before the admin can **PUBLISH ON CARD →** (creates the real `Bout` row).
+- Bell + email notifications on offer, decline, single-side accept, and final confirm.
+- Opponent select on existing interest rows filters by division + primary martial art.
+
+**Clubs**
+- Club owners can **invite a fighter** to affiliate (`ClubFighterInvite`); fighter accepts from `/portal/profile`.
+- Clubs can **raise event interest on behalf of a fighter** (status `pending_fighter`); fighter must confirm before admin sees it.
+- `/portal/club` editorial sections (timetable image, weekly classes, passes & pricing) are **gated behind `Gym.status === "active"`** — `requireActiveGym` in `app/actions/club.ts` enforces it.
+
+**Admin tools**
+- Fighter management page has a free-text search (name / fighter no / email / gym).
+- Admin rankings page distinguishes "no fighters in division" vs "no ranking set".
+
+**Site-wide**
+- Header **magnifier search** opens a mobile sheet / desktop popover with quick jump links → submits to new `/search` page (fighters / clubs / events).
+- Notification bell counter clears on the next render after visiting `/portal/notifications`.
+
+**Prisma migrations added**
+- `20261126120000_bouts_and_club_invites` — `EventRegistration.confirmedAt`, `.boutRef`, `.raisedByGymId` + `club_fighter_invites` table.
+- `20261126180000_ranking_access` — `ranking_access_requests` + `ranking_share_tokens`.
 
 ---
 
@@ -32,6 +73,8 @@ This file is intentionally kept short — see `docs/` for deep dives.
 | `/register` | Fighter signup (with declared record + optional notes) |
 | `/passport/[fighterNo]` | Digital Fighter Passport card with real QR |
 | `/api/passport/[fighterNo]` | Public JSON for QR verification |
+| `/search` | Cross-site search (fighters / clubs / events), driven by header magnifier |
+| `/rankings/share/[token]` | Public 24h share of the national rankings, scope = full or a single division |
 | `/about`, `/contact`, `/privacy`, `/terms`, `/robots.txt`, `/sitemap.xml` | Content & SEO |
 
 ### Member portal (auth-gated)
@@ -44,10 +87,11 @@ This file is intentionally kept short — see `docs/` for deep dives.
 ### Admin workspace (role=`admin`)
 | Route | Function |
 |---|---|
-| `/portal/admin/fighters` | Review applications · approve/reject/suspend · edit full fighter profile + record |
+| `/portal/admin/fighters` | Review applications · search by name/email/gym · approve/reject/suspend · edit full profile + record |
 | `/portal/admin/gyms` | Review enquiries · send onboarding links · approve (creates coach account + temp pw) |
-| `/portal/admin/events` | Create/edit/delete events · record bout results |
-| `/portal/admin/rankings` | Set positions per division (compacts gaps automatically) |
+| `/portal/admin/events` | Create/edit/delete events · add bout offers (gender/division filter) · publish confirmed bouts · record results |
+| `/portal/admin/rankings` | Set positions per division (distinguishes "no fighters" vs "no ranking yet") |
+| `/portal/admin/ranking-requests` | Share-request queue with 24h signed-link modal · scope = full or a single division |
 | `/portal/admin/inbox` | Outbound mail log (every notification visible) |
 
 ### Ranking admin workspace (role=`ranking_admin`, scoped)

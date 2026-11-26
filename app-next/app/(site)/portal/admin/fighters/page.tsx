@@ -17,16 +17,34 @@ export const metadata = { title: "Admin · Fighters" };
 export default async function AdminFightersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ filter?: string }>;
+  searchParams: Promise<{ filter?: string; q?: string }>;
 }) {
   const session = await auth();
   if (session?.user?.role !== "admin") redirect("/portal/sign-in");
-  const { filter } = await searchParams;
+  const { filter, q } = await searchParams;
+  const term = (q ?? "").trim();
 
-  const where =
+  const statusWhere =
     filter && filter !== "all"
       ? { approvalStatus: filter }
       : {};
+
+  // Build a where that combines status filter + free-text search over the
+  // most useful fields: fighter name, email, fighter number, gym name.
+  const searchWhere = term
+    ? {
+        OR: [
+          { athlete: { name: { contains: term } } },
+          { athlete: { nickname: { contains: term } } },
+          { athlete: { passport: { fighterNo: { contains: term } } } },
+          { user: { email: { contains: term } } },
+          { user: { name: { contains: term } } },
+          { gym: { name: { contains: term } } },
+        ],
+      }
+    : {};
+
+  const where = { ...statusWhere, ...searchWhere };
 
   const applications = await prisma.fighterProfile.findMany({
     where,
@@ -54,6 +72,8 @@ export default async function AdminFightersPage({
   ) as Record<string, number>;
   const totalAll = Object.values(countBy).reduce((a, b) => a + b, 0);
 
+  const qQuery = term ? `&q=${encodeURIComponent(term)}` : "";
+
   return (
     <>
       <PageHeader eyebrow="Administrator" title="Fighter management">
@@ -70,6 +90,39 @@ export default async function AdminFightersPage({
           </Link>
         </div>
 
+        {/* Search bar — GET form, preserves active filter via a hidden input. */}
+        <form
+          method="get"
+          className="mb-4 flex flex-col sm:flex-row gap-2"
+          role="search"
+        >
+          {filter && <input type="hidden" name="filter" value={filter} />}
+          <input
+            name="q"
+            type="search"
+            defaultValue={term}
+            placeholder="Search by name, email, fighter number or gym…"
+            aria-label="Search fighters"
+            className="flex-1 px-4 py-2.5 bg-bg border border-border text-white text-sm rounded-lg focus:border-gold outline-none"
+          />
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              className="bg-gold text-bg px-5 py-2.5 font-display font-bold text-xs tracking-wider uppercase rounded-full hover:bg-gold-hi"
+            >
+              Search
+            </button>
+            {term && (
+              <Link
+                href={`/portal/admin/fighters${filter ? `?filter=${filter}` : ""}`}
+                className="inline-flex items-center border border-border text-white px-4 py-2.5 font-display font-bold text-xs tracking-wider uppercase rounded-full hover:border-gold"
+              >
+                Clear
+              </Link>
+            )}
+          </div>
+        </form>
+
         <nav className="flex flex-wrap gap-2 mb-6">
           {[
             ["", "All", totalAll],
@@ -79,11 +132,11 @@ export default async function AdminFightersPage({
             ["suspended", "Suspended", countBy.suspended ?? 0],
           ].map(([val, lbl, n]) => {
             const active = (filter ?? "") === String(val);
-            const q = val ? `?filter=${val}` : "";
+            const base = val ? `?filter=${val}${qQuery}` : term ? `?q=${encodeURIComponent(term)}` : "";
             return (
               <Link
                 key={String(lbl)}
-                href={`/portal/admin/fighters${q}`}
+                href={`/portal/admin/fighters${base}`}
                 className={`px-4 py-2 text-xs font-display tracking-wider border ${
                   active
                     ? "bg-gold text-bg border-gold"
@@ -97,7 +150,13 @@ export default async function AdminFightersPage({
         </nav>
 
         {applications.length === 0 ? (
-          <EmptyState title="No applications in this view." />
+          <EmptyState
+            title={
+              term
+                ? `No applications match “${term}”${filter ? ` in this view` : ""}.`
+                : "No applications in this view."
+            }
+          />
         ) : (
           <div className="space-y-5">
             {applications.map((a) => (
@@ -337,13 +396,17 @@ function ApplicationDetails({ app }: { app: AppWithExtras }) {
         <div>
           <dt className="text-[10px] uppercase tracking-wider text-muted">Gym</dt>
           <dd className="text-white font-display">
-            {gymDisplay || <span className="text-red-300">Not supplied</span>}
+            {gymDisplay || (
+              <span className="text-muted italic">Not captured at signup</span>
+            )}
           </dd>
         </div>
         <div>
           <dt className="text-[10px] uppercase tracking-wider text-muted">Coach</dt>
           <dd className="text-white font-display">
-            {coachDisplay || <span className="text-red-300">Not supplied</span>}
+            {coachDisplay || (
+              <span className="text-muted italic">Not captured at signup</span>
+            )}
           </dd>
         </div>
         <div>

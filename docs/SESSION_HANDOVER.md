@@ -1,6 +1,57 @@
 # W.U.C.O — Session Handover (pick up here next time)
 
-## Current W.U.C.O application and event workflow
+> _Last updated: 2026-11-26._ The authoritative fighter + admin walkthrough
+> for the current Next.js app lives at [`docs/WUCO_WORKFLOWS.md`](WUCO_WORKFLOWS.md).
+> Everything below the horizontal rule is historical context from the legacy
+> Python prototype — kept only for reference.
+
+## 2026-11-26 — what landed this sprint
+
+- **Registration wizard** uses a **club picker** (active WUCO gyms + free-text
+  fallback). Picking an existing club queues a `GymJoinRequest` so the club
+  sees the fighter after admin approval. W-L-D per discipline stays on step 3.
+- **Profile completeness** rule swapped: "Social link added" replaces
+  "At least one fight history entry" (weight 20).
+- **Portrait uploader** moved onto the fighter card: Add / Change / Remove
+  inline. New `removePortrait` server action.
+- **Fighter rankings view** locked to their own division top 10.
+  "Request more rankings" persists a `RankingAccessRequest` and notifies admin.
+- **Admin ranking share**: new page `/portal/admin/ranking-requests` with a
+  modal that mints a 24-hour signed URL and emails it. Public view at
+  `/rankings/share/[token]` honours the scope (full or a single division).
+- **Two-sided bouts**: paired `EventRegistration` rows share a `boutRef`;
+  both fighters must accept before admin can **PUBLISH ON CARD →** (creates
+  the real `Bout` row). New `AdminAddBoutForm` filters red/blue by
+  gender + division.
+- **Club portal**: owners can invite a fighter (`ClubFighterInvite`) and
+  raise event interest on behalf of a member (status `pending_fighter` —
+  fighter must confirm). Three new editorial sections (timetable image,
+  weekly classes, passes & pricing) are **gated on `Gym.status === "active"`**.
+- **Global header search** — magnifier opens a mobile sheet / desktop popover
+  with jump-to shortcuts, submits to the new `/search` page (fighters, clubs,
+  events). Admin fighters page has its own `?q=` filter.
+- **Bell counter** clears on the next render after visiting
+  `/portal/notifications` (no `revalidatePath` from server render — `auth()`
+  already makes `SiteHeader` dynamic).
+
+### Prisma migrations added
+- `20261126120000_bouts_and_club_invites`
+- `20261126180000_ranking_access`
+
+### Known loose ends
+- Next.js 16.4.3 security advisory still outstanding — first `next dev` run
+  exits with a nudge, second run proceeds. User has deferred the upgrade.
+- Cloudflare Workers port owed from the Nov beta sprint.
+- Orphaned after the portrait rework: `components/forms/portrait-form.tsx`.
+- Unused after the two-sided bout rework: `addBout` export in
+  `app/actions/admin-editor.ts` (keep the file; the fight-result path still
+  uses the other exports).
+
+---
+
+## Legacy content (Python prototype) — kept for reference
+
+
 
 New fighters submit a private application; an administrator reviews and approves (or rejects) it before
 public listing, ranking publication or event entry. **There is no application fee** — the previous

@@ -5,6 +5,7 @@ import { useActionState } from "react";
 import {
   registerEventInterest,
   respondToBoutOffer,
+  respondToClubInterest,
   type EventFlowState,
 } from "@/app/actions/event-flow";
 
@@ -15,9 +16,10 @@ export function EventInterestBlock({
   status,
   offer,
   eventPast,
+  clubName = null,
 }: {
   eventId: number;
-  /** 'none' | 'interested' | 'offered' | 'accepted' | 'declined' | 'confirmed' | 'cancelled' */
+  /** 'none' | 'interested' | 'offered' | 'accepted' | 'declined' | 'confirmed' | 'cancelled' | 'pending_fighter' */
   status: string;
   offer: {
     opponent: string;
@@ -26,8 +28,53 @@ export function EventInterestBlock({
     note: string;
   };
   eventPast: boolean;
+  /** Name of the club that raised the interest, when status==='pending_fighter'. */
+  clubName?: string | null;
 }) {
   const [state, action, pending] = useActionState(registerEventInterest, initial);
+
+  // Club raised interest on the fighter's behalf — needs the fighter to agree
+  // before admin even sees it.
+  if (status === "pending_fighter") {
+    return (
+      <div
+        className="rounded-2xl border-2 border-gold/60 p-5 md:p-6"
+        style={{ background: "linear-gradient(90deg, rgba(200,164,90,0.1), rgba(11,61,46,0.4))" }}
+      >
+        <p className="font-display text-xs tracking-widest text-gold uppercase mb-1">
+          Your club wants to put you on this card
+        </p>
+        <p className="text-sm text-white mb-4">
+          {clubName
+            ? `${clubName} has raised interest on your behalf.`
+            : "Your club has raised interest on your behalf."}{" "}
+          Confirm to let the W.U.C.O admin know, or decline to hold off.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <form action={respondToClubInterest}>
+            <input type="hidden" name="event_id" value={eventId} />
+            <input type="hidden" name="decision" value="accept" />
+            <button
+              type="submit"
+              className="bg-emerald text-white px-5 py-2.5 font-display font-bold text-xs tracking-wider uppercase rounded-full hover:bg-emerald-hi"
+            >
+              Confirm interest
+            </button>
+          </form>
+          <form action={respondToClubInterest}>
+            <input type="hidden" name="event_id" value={eventId} />
+            <input type="hidden" name="decision" value="decline" />
+            <button
+              type="submit"
+              className="border border-red-500 text-red-200 px-5 py-2.5 font-display font-bold text-xs tracking-wider uppercase rounded-full hover:bg-red-500 hover:text-white"
+            >
+              Not this one
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
 
   // Admin-sent offer — accept/decline UI.
   if (status === "offered") {
@@ -40,8 +87,8 @@ export function EventInterestBlock({
           Bout offered for this event
         </p>
         <p className="text-sm text-white mb-4">
-          A W.U.C.O admin has offered you a bout. Accept to confirm your
-          registration, or decline — the admin will be notified either way.
+          A W.U.C.O admin has offered you a bout. The bout is only{" "}
+          <strong>confirmed once both fighters accept</strong>.
         </p>
         <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs mb-5">
           <DT label="Opponent">{offer.opponent || "—"}</DT>
@@ -81,15 +128,29 @@ export function EventInterestBlock({
     );
   }
 
-  if (status === "accepted" || status === "confirmed") {
+  if (status === "confirmed") {
     return (
       <div className="rounded-2xl border border-emerald/60 bg-emerald/10 p-4 md:p-5">
         <p className="font-display text-xs tracking-widest text-emerald uppercase mb-1">
-          You&apos;re on the card
+          Bout confirmed
         </p>
         <p className="text-sm text-white">
-          You&apos;ve accepted the bout offer. You&apos;ll be contacted with the
-          final fight details ahead of the event.
+          Both fighters have accepted — your bout is confirmed. You&apos;ll be
+          contacted with the final fight details ahead of the event.
+        </p>
+      </div>
+    );
+  }
+
+  if (status === "accepted") {
+    return (
+      <div className="rounded-2xl border border-emerald/60 bg-emerald/10 p-4 md:p-5">
+        <p className="font-display text-xs tracking-widest text-emerald uppercase mb-1">
+          You&apos;ve accepted
+        </p>
+        <p className="text-sm text-white">
+          You&apos;ve accepted the bout offer. Waiting on your opponent to
+          accept too — once they do, the bout is confirmed.
         </p>
       </div>
     );

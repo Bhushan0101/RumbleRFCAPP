@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { prisma } from "@/lib/prisma";
 import { Container } from "@/components/ui/container";
 import { PageHeader } from "@/components/site/page-header";
 import { FighterRegisterForm } from "@/components/forms/fighter-register-form";
@@ -8,7 +9,12 @@ export const metadata = {
   description: "Join W.U.C.O Ireland and start your official fight record.",
 };
 
-export default function RegisterPage() {
+export default async function RegisterPage() {
+  const gyms = await prisma.gym.findMany({
+    where: { status: "active" },
+    select: { id: true, name: true, city: true },
+    orderBy: { name: "asc" },
+  });
   return (
     <>
       <PageHeader
@@ -32,7 +38,7 @@ export default function RegisterPage() {
             <div className="absolute inset-0 bg-gradient-to-t from-bg/70 via-transparent to-transparent" />
           </div>
           <div className="bg-surface border border-border p-4 sm:p-6 md:p-8 rounded-2xl">
-            <FighterRegisterForm />
+            <FighterRegisterForm gyms={gyms} />
           </div>
         </div>
       </Container>

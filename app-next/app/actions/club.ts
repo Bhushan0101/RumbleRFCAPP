@@ -10,13 +10,23 @@ export type ClubFlowState = { ok: boolean; message: string };
 
 // --------- Resolve "which gym does this user own?" -----------------------
 // Used by every club-side action to scope writes to the signed-in gym.
-async function requireGymForUser(userId: number): Promise<{ id: number; slug: string | null; name: string }> {
+async function requireGymForUser(
+  userId: number,
+): Promise<{ id: number; slug: string | null; name: string; status: string }> {
   const gym = await prisma.gym.findFirst({
     where: { ownerId: userId },
-    select: { id: true, slug: true, name: true },
+    select: { id: true, slug: true, name: true, status: true },
   });
   if (!gym) throw new Error("No club is linked to this account.");
   return gym;
+}
+
+// Gate for actions that should only run once admin approved the club onto
+// WUCO. Callers still need to pass the gym through requireGymForUser first.
+function requireActiveGym(gym: { status: string }) {
+  if (gym.status !== "active") {
+    throw new Error("Your club must be approved by a W.U.C.O admin first.");
+  }
 }
 
 // --------- Fighter requests to join a club -------------------------------
@@ -438,3 +448,415 @@ export async function requestClubClosure(
   };
 }
 
+// --------- Club invites a fighter to join --------------------------------
+const inviteSchema = z.object({
+  athlete_id: z.coerce.number().int().positive(),
+  note: z.string().max(1000).optional().default(""),
+});
+
+export async function inviteFighterToClub(
+  _prev: ClubFlowState,
+  formData: FormData,
+): Promise<ClubFlowState> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, message: "Sign in required." };
+  if (session.user.role !== "gym" && session.user.role !== "coach" && session.user.role !== "admin") {
+    return { ok: false, message: "Only club accounts can invite fighters." };
+  }
+  const parsed = inviteSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { ok: false, message: "Pick a fighter to invite." };
+  const { athlete_id, note } = parsed.data;
+
+  const gym = await requireGymForUser(Number(session.user.id));
+  const target = await prisma.athlete.findFirst({
+    where: { id: athlete_id, profile: { approvalStatus: "approved" } },
+    include: { profile: { include: { user: true } } },
+  });
+  if (!target) return { ok: false, message: "Fighter not found or not approved yet." };
+  if (target.profile?.gymId === gym.id) {
+    return { ok: true, message: "That fighter is already a member of your club." };
+  }
+
+  const existing = await prisma.clubFighterInvite.findUnique({
+    where: { gymId_athleteId: { gymId: gym.id, athleteId: athlete_id } },
+  });
+  if (existing && existing.status === "pending") {
+    return { ok: true, message: "An invite is already pending with that fighter." };
+  }
+  if (existing) {
+    await prisma.clubFighterInvite.update({
+      where: { id: existing.id },
+      data: {
+        status: "pending",
+        note,
+        createdAt: new Date(),
+        respondedAt: null,
+        invitedById: Number(session.user.id),
+      },
+    });
+  } else {
+    await prisma.clubFighterInvite.create({
+      data: {
+        gymId: gym.id,
+        athleteId: athlete_id,
+        invitedById: Number(session.user.id),
+        note,
+      },
+    });
+  }
+
+  if (target.profile?.user) {
+    await prisma.notification.create({
+      data: {
+        userId: target.profile.user.id,
+        kind: "club_invite",
+        title: `${gym.name} wants you to join`,
+        body: note || `Accept to affiliate your W.U.C.O profile with ${gym.name}.`,
+        link: "/portal/profile",
+      },
+    });
+    await sendMail({
+      to: target.profile.user.email,
+      subject: `W.U.C.O: ${gym.name} wants you to join`,
+      body:
+        `Hi ${target.name},\n\n` +
+        `${gym.name} has invited you to affiliate with them on W.U.C.O.\n\n` +
+        (note ? `Note: ${note}\n\n` : "") +
+        `Accept or decline from your portal: ${SITE_URL}/portal/profile\n\n— W.U.C.O Ireland`,
+      category: "gym_join_request",
+    });
+  }
+
+  revalidatePath("/portal/club");
+  return { ok: true, message: `Invite sent to ${target.name}.` };
+}
+
+// --------- Fighter responds to a club invite ----------------------------
+const inviteResponseSchema = z.object({
+  invite_id: z.coerce.number().int().positive(),
+  decision: z.enum(["accept", "decline"]),
+});
+
+export async function respondToClubInvite(formData: FormData) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Sign in required.");
+  const d = inviteResponseSchema.parse(Object.fromEntries(formData));
+
+  const profile = await prisma.fighterProfile.findFirst({
+    where: { userId: Number(session.user.id) },
+    include: { athlete: true },
+  });
+  if (!profile) throw new Error("Fighter profile not found.");
+
+  const invite = await prisma.clubFighterInvite.findUnique({
+    where: { id: d.invite_id },
+    include: { gym: true },
+  });
+  if (!invite || invite.athleteId !== profile.athleteId) {
+    throw new Error("Invite not found.");
+  }
+  if (invite.status !== "pending") {
+    throw new Error("Invite already resolved.");
+  }
+
+  const now = new Date();
+  await prisma.$transaction(async (tx) => {
+    await tx.clubFighterInvite.update({
+      where: { id: invite.id },
+      data: {
+        status: d.decision === "accept" ? "accepted" : "declined",
+        respondedAt: now,
+      },
+    });
+    if (d.decision === "accept") {
+      await tx.fighterProfile.update({
+        where: { athleteId: profile.athleteId },
+        data: { gymId: invite.gymId },
+      });
+    }
+  });
+
+  // Notify the club owner.
+  if (invite.gym.ownerId) {
+    const owner = await prisma.portalUser.findUnique({
+      where: { id: invite.gym.ownerId },
+      select: { id: true, email: true, name: true },
+    });
+    if (owner) {
+      await prisma.notification.create({
+        data: {
+          userId: owner.id,
+          kind: d.decision === "accept" ? "club_invite_accepted" : "club_invite_declined",
+          title: `${profile.athlete.name} ${d.decision === "accept" ? "joined" : "declined"} ${invite.gym.name}`,
+          body: d.decision === "accept" ? "They are now affiliated with your club." : "",
+          link: "/portal/club",
+        },
+      });
+      if (owner.email) {
+        await sendMail({
+          to: owner.email,
+          subject: `W.U.C.O: ${profile.athlete.name} ${d.decision === "accept" ? "accepted" : "declined"} your invite`,
+          body:
+            `Hi ${owner.name},\n\n` +
+            `${profile.athlete.name} ${d.decision === "accept" ? "accepted your invite to join" : "declined your invite to join"} ${invite.gym.name}.\n\n` +
+            `Manage your club: ${SITE_URL}/portal/club\n\n— W.U.C.O Ireland`,
+          category: "gym_join_request",
+        });
+      }
+    }
+  }
+
+  revalidatePath("/portal/profile");
+  revalidatePath("/portal/club");
+}
+
+// --------- Club cancels a pending invite --------------------------------
+export async function cancelClubInvite(formData: FormData) {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Sign in required.");
+  const id = Number(formData.get("invite_id"));
+  if (!id) throw new Error("Missing invite id.");
+  const gym = await requireGymForUser(Number(session.user.id));
+  await prisma.clubFighterInvite.updateMany({
+    where: { id, gymId: gym.id, status: "pending" },
+    data: { status: "cancelled", respondedAt: new Date() },
+  });
+  revalidatePath("/portal/club");
+}
+
+
+// --------- Timetable image upload / removal -------------------------------
+export async function updateTimetableImage(
+  _prev: ClubFlowState,
+  formData: FormData,
+): Promise<ClubFlowState> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, message: "Sign in required." };
+  if (session.user.role !== "gym" && session.user.role !== "coach") {
+    return { ok: false, message: "Only club accounts can edit the timetable." };
+  }
+  const file = formData.get("timetable") as File | null;
+  if (!file || typeof file === "string" || file.size === 0) {
+    return { ok: false, message: "Choose an image to upload." };
+  }
+  if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+    return { ok: false, message: "Image must be JPG, PNG, WEBP or GIF." };
+  }
+  if (file.size > MAX_IMAGE_BYTES) {
+    return { ok: false, message: "Image is larger than 5 MB." };
+  }
+  const gym = await requireGymForUser(Number(session.user.id));
+  requireActiveGym(gym);
+
+  const ext =
+    file.type === "image/png"
+      ? "png"
+      : file.type === "image/webp"
+        ? "webp"
+        : file.type === "image/gif"
+          ? "gif"
+          : "jpg";
+  const name = `timetable-${gym.id}-${Date.now()}.${ext}`;
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const dir = join(process.cwd(), "public", "uploads", "timetables");
+  await mkdir(dir, { recursive: true });
+  const buf = Buffer.from(await file.arrayBuffer());
+  await writeFile(join(dir, name), buf);
+  const publicPath = `/uploads/timetables/${name}`;
+
+  await prisma.gym.update({
+    where: { id: gym.id },
+    data: { timetableImageUrl: publicPath },
+  });
+  revalidatePath("/portal/club");
+  if (gym.slug) revalidatePath(`/clubs/${gym.slug}`);
+  return { ok: true, message: "Timetable image updated." };
+}
+
+export async function removeTimetableImage(formData: FormData) {
+  const session = await auth();
+  if (!session?.user?.id) return;
+  const gym = await requireGymForUser(Number(session.user.id));
+  requireActiveGym(gym);
+  void formData; // no fields needed
+  await prisma.gym.update({
+    where: { id: gym.id },
+    data: { timetableImageUrl: null },
+  });
+  revalidatePath("/portal/club");
+  if (gym.slug) revalidatePath(`/clubs/${gym.slug}`);
+}
+
+// --------- Structured class slots (weekly timetable) ---------------------
+const classSchema = z.object({
+  class_id: z.coerce.number().int().positive().optional(),
+  title: z.string().min(1).max(120),
+  discipline: z.string().max(60).optional().default(""),
+  // 0 = Monday … 6 = Sunday (matching Date.getDay with Mon-first mapping).
+  day_of_week: z.coerce.number().int().min(0).max(6),
+  start_time: z.string().regex(/^\d{2}:\d{2}$/, "Use HH:MM."),
+  duration_minutes: z.coerce.number().int().min(15).max(240),
+  capacity: z.coerce.number().int().min(1).max(500).default(20),
+  per_class_price_eur: z.string().optional().default(""),
+  revolut_url: z.string().max(400).optional().default(""),
+  colour: z.string().max(40).optional().default(""),
+});
+
+export async function saveGymClass(
+  _prev: ClubFlowState,
+  formData: FormData,
+): Promise<ClubFlowState> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, message: "Sign in required." };
+  if (session.user.role !== "gym" && session.user.role !== "coach") {
+    return { ok: false, message: "Only club accounts can edit classes." };
+  }
+  const parsed = classSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    const first = Object.values(parsed.error.flatten().fieldErrors)[0]?.[0];
+    return { ok: false, message: first ?? "Please correct the form." };
+  }
+  const d = parsed.data;
+  const gym = await requireGymForUser(Number(session.user.id));
+  requireActiveGym(gym);
+
+  const priceCents =
+    d.per_class_price_eur && d.per_class_price_eur.trim() !== ""
+      ? Math.max(0, Math.round(Number(d.per_class_price_eur) * 100))
+      : null;
+
+  if (d.class_id) {
+    // Verify ownership before writing.
+    const existing = await prisma.gymClass.findFirst({
+      where: { id: d.class_id, gymId: gym.id },
+      select: { id: true },
+    });
+    if (!existing) return { ok: false, message: "Class not found." };
+    await prisma.gymClass.update({
+      where: { id: d.class_id },
+      data: {
+        title: d.title,
+        discipline: d.discipline,
+        dayOfWeek: d.day_of_week,
+        startTime: d.start_time,
+        durationMinutes: d.duration_minutes,
+        capacity: d.capacity,
+        perClassPriceCents: priceCents,
+        revolutUrl: d.revolut_url,
+        colour: d.colour,
+      },
+    });
+  } else {
+    await prisma.gymClass.create({
+      data: {
+        gymId: gym.id,
+        title: d.title,
+        discipline: d.discipline,
+        dayOfWeek: d.day_of_week,
+        startTime: d.start_time,
+        durationMinutes: d.duration_minutes,
+        capacity: d.capacity,
+        perClassPriceCents: priceCents,
+        revolutUrl: d.revolut_url,
+        colour: d.colour,
+      },
+    });
+  }
+  revalidatePath("/portal/club");
+  if (gym.slug) revalidatePath(`/clubs/${gym.slug}`);
+  return { ok: true, message: "Class saved." };
+}
+
+export async function deleteGymClass(formData: FormData) {
+  const session = await auth();
+  if (!session?.user?.id) return;
+  const id = Number(formData.get("class_id"));
+  if (!id) return;
+  const gym = await requireGymForUser(Number(session.user.id));
+  requireActiveGym(gym);
+  // Scope to the signed-in gym so one owner can't delete another's class.
+  await prisma.gymClass.deleteMany({ where: { id, gymId: gym.id } });
+  revalidatePath("/portal/club");
+  if (gym.slug) revalidatePath(`/clubs/${gym.slug}`);
+}
+
+// --------- Passes / paid products -----------------------------------------
+const PRODUCT_KINDS = ["day_pass", "weekly_pass", "monthly_pass", "per_class"] as const;
+
+const productSchema = z.object({
+  product_id: z.coerce.number().int().positive().optional(),
+  kind: z.enum(PRODUCT_KINDS),
+  title: z.string().min(1).max(120),
+  price_eur: z.string().min(1, "Enter a price in EUR."),
+  revolut_url: z.string().max(400).optional().default(""),
+  active: z.coerce.number().int().min(0).max(1).default(1),
+});
+
+export async function saveGymProduct(
+  _prev: ClubFlowState,
+  formData: FormData,
+): Promise<ClubFlowState> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, message: "Sign in required." };
+  if (session.user.role !== "gym" && session.user.role !== "coach") {
+    return { ok: false, message: "Only club accounts can edit passes." };
+  }
+  const parsed = productSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    const first = Object.values(parsed.error.flatten().fieldErrors)[0]?.[0];
+    return { ok: false, message: first ?? "Please correct the form." };
+  }
+  const d = parsed.data;
+  const priceNum = Number(d.price_eur);
+  if (!Number.isFinite(priceNum) || priceNum < 0) {
+    return { ok: false, message: "Price must be a positive number." };
+  }
+  const priceCents = Math.round(priceNum * 100);
+  const gym = await requireGymForUser(Number(session.user.id));
+  requireActiveGym(gym);
+
+  if (d.product_id) {
+    const existing = await prisma.gymProduct.findFirst({
+      where: { id: d.product_id, gymId: gym.id },
+      select: { id: true },
+    });
+    if (!existing) return { ok: false, message: "Pass not found." };
+    await prisma.gymProduct.update({
+      where: { id: d.product_id },
+      data: {
+        kind: d.kind,
+        title: d.title,
+        priceCents,
+        revolutUrl: d.revolut_url,
+        active: d.active,
+      },
+    });
+  } else {
+    await prisma.gymProduct.create({
+      data: {
+        gymId: gym.id,
+        kind: d.kind,
+        title: d.title,
+        priceCents,
+        revolutUrl: d.revolut_url,
+        active: d.active,
+      },
+    });
+  }
+  revalidatePath("/portal/club");
+  if (gym.slug) revalidatePath(`/clubs/${gym.slug}`);
+  return { ok: true, message: "Pass saved." };
+}
+
+export async function deleteGymProduct(formData: FormData) {
+  const session = await auth();
+  if (!session?.user?.id) return;
+  const id = Number(formData.get("product_id"));
+  if (!id) return;
+  const gym = await requireGymForUser(Number(session.user.id));
+  requireActiveGym(gym);
+  await prisma.gymProduct.deleteMany({ where: { id, gymId: gym.id } });
+  revalidatePath("/portal/club");
+  if (gym.slug) revalidatePath(`/clubs/${gym.slug}`);
+}

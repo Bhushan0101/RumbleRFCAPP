@@ -122,6 +122,27 @@ export async function updatePortraitUrl(
   return { ok: true, message: "Photo updated." };
 }
 
+export async function removePortrait(
+  _prev: ProfileState,
+  _formData: FormData,
+): Promise<ProfileState> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, message: "Please sign in." };
+  const profile = await prisma.fighterProfile.findFirst({
+    where: { userId: session.user.id },
+    select: { athleteId: true },
+  });
+  if (!profile) return { ok: false, message: "No fighter profile linked." };
+  await prisma.athlete.update({
+    where: { id: profile.athleteId },
+    data: { portraitUrl: null },
+  });
+  revalidatePath("/portal");
+  revalidatePath("/portal/profile");
+  revalidatePath(`/fighters/${profile.athleteId}`);
+  return { ok: true, message: "Photo removed." };
+}
+
 // ---- Fighter gallery photos ----------------------------------------------
 
 const MAX_PHOTOS_PER_FIGHTER = 20;

@@ -7,7 +7,7 @@ import { cn } from "@/lib/cn";
 import { MARTIAL_ARTS } from "@/lib/martial-arts";
 import { divisionDisplayName } from "@/lib/divisions";
 import { RankMedal } from "@/components/ui/rank-medal";
-import { requestFullRankings } from "@/app/actions/support";
+import { requestFullRankings, requestExtraRankings } from "@/app/actions/support";
 import type { SupportState } from "@/app/actions/support";
 
 export type RankingsFullRow = {
@@ -37,32 +37,45 @@ export function RankingsFullTable({
   rows,
   signedIn,
   canSeeFull,
+  fighterDivision = null,
 }: {
   rows: RankingsFullRow[];
   signedIn: boolean;
   canSeeFull: boolean;
+  /** When set, the signed-in user is a fighter and should only see this division. */
+  fighterDivision?: string | null;
 }) {
   const [discipline, setDiscipline] = React.useState<string>("all");
-  const [requestState, requestAction, requestPending] = useActionState(
+  const [fullState, fullAction, fullPending] = useActionState(
     requestFullRankings,
     initialRequestState,
   );
+  const [extraState, extraAction, extraPending] = useActionState(
+    requestExtraRankings,
+    initialRequestState,
+  );
+
+  // Fighters are locked to their own division only. Non-fighters (and admins)
+  // see everything subject to the limits below.
+  const scopedRows = fighterDivision && !canSeeFull
+    ? rows.filter((r) => r.division === fighterDivision)
+    : rows;
 
   const visibleRows =
     discipline === "all"
-      ? rows
-      : rows.filter((r) => r.disciplines.includes(discipline));
+      ? scopedRows
+      : scopedRows.filter((r) => r.disciplines.includes(discipline));
 
   const divisions = Array.from(new Set(visibleRows.map((r) => r.division)));
 
   // Decide the per-division cap.
-  //   - Signed out            → top 5 + sign-in teaser.
-  //   - Fighter (default)     → top 10 + "Request full rankings" button.
-  //   - Promoter / admin      → full list.
+  //   - Signed out                    → top 5 + sign-in teaser.
+  //   - Fighter (own division only)   → top 10 + "Request other divisions".
+  //   - Promoter / admin              → full list.
   let perDivisionLimit: number | null;
   if (!signedIn) perDivisionLimit = PUBLIC_LIMIT;
   else if (canSeeFull) perDivisionLimit = null;
-  else perDivisionLimit = FIGHTER_LIMIT; // fighter
+  else perDivisionLimit = FIGHTER_LIMIT;
 
   const anyHidden =
     perDivisionLimit != null &&
@@ -103,8 +116,49 @@ export function RankingsFullTable({
         </div>
       )}
 
-      {/* Fighter view: top-10 teaser + request for full access */}
-      {signedIn && !canSeeFull && anyHidden && (
+      {/* Fighter view: locked to own division — offer a request for more */}
+      {signedIn && !canSeeFull && fighterDivision && (
+        <div
+          className="mb-6 rounded-xl border-2 border-gold/60 p-4 md:p-5 flex flex-col md:flex-row items-center justify-between gap-3 md:gap-5"
+          style={{ background: "linear-gradient(90deg, rgba(200,164,90,0.08), rgba(11,61,46,0.4))" }}
+        >
+          <div className="text-center md:text-left">
+            <p className="font-display text-sm md:text-base text-white tracking-wider">
+              Showing your division: {divisionDisplayName(null, fighterDivision)}.
+            </p>
+            <p className="text-xs md:text-sm text-muted mt-1">
+              Fighters see the top {FIGHTER_LIMIT} of their own division. Need to
+              see other divisions? Ask a W.U.C.O admin — they&apos;ll review and
+              get back to you.
+            </p>
+            {extraState.message && (
+              <p
+                className={`text-xs mt-2 ${
+                  extraState.ok ? "text-emerald-300" : "text-red-300"
+                }`}
+              >
+                {extraState.message}
+              </p>
+            )}
+          </div>
+          <form action={extraAction}>
+            <button
+              type="submit"
+              disabled={extraPending || extraState.ok}
+              className="inline-block bg-gold text-bg px-5 py-2.5 font-display font-bold text-[11px] tracking-wider uppercase rounded-full hover:bg-gold-hi whitespace-nowrap disabled:opacity-60"
+            >
+              {extraPending
+                ? "Sending…"
+                : extraState.ok
+                  ? "Request sent"
+                  : "Request more rankings"}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* Fighter without a division yet — fall back to top-10 teaser */}
+      {signedIn && !canSeeFull && !fighterDivision && anyHidden && (
         <div
           className="mb-6 rounded-xl border-2 border-gold/60 p-4 md:p-5 flex flex-col md:flex-row items-center justify-between gap-3 md:gap-5"
           style={{ background: "linear-gradient(90deg, rgba(200,164,90,0.08), rgba(11,61,46,0.4))" }}
@@ -117,25 +171,25 @@ export function RankingsFullTable({
               Full national rankings are available to promoters. Ask a W.U.C.O
               admin to grant you access if you need to see them.
             </p>
-            {requestState.message && (
+            {fullState.message && (
               <p
                 className={`text-xs mt-2 ${
-                  requestState.ok ? "text-emerald-300" : "text-red-300"
+                  fullState.ok ? "text-emerald-300" : "text-red-300"
                 }`}
               >
-                {requestState.message}
+                {fullState.message}
               </p>
             )}
           </div>
-          <form action={requestAction}>
+          <form action={fullAction}>
             <button
               type="submit"
-              disabled={requestPending || requestState.ok}
+              disabled={fullPending || fullState.ok}
               className="inline-block bg-gold text-bg px-5 py-2.5 font-display font-bold text-[11px] tracking-wider uppercase rounded-full hover:bg-gold-hi whitespace-nowrap disabled:opacity-60"
             >
-              {requestPending
+              {fullPending
                 ? "Sending…"
-                : requestState.ok
+                : fullState.ok
                   ? "Request sent"
                   : "Request full rankings"}
             </button>
@@ -165,7 +219,9 @@ export function RankingsFullTable({
 
       {divisions.length === 0 ? (
         <p className="text-sm text-muted text-center py-10 border border-dashed border-border rounded-xl">
-          No ranked fighters in this discipline yet.
+          {fighterDivision && !canSeeFull
+            ? "No ranked fighters in your division yet. Use the button above to request visibility into other divisions."
+            : "No ranked fighters in this discipline yet."}
         </p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

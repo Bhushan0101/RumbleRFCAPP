@@ -9,11 +9,19 @@ import {
   saveEvent,
   deleteEvent,
   recordBoutResult,
-  addBout,
   deleteBout,
 } from "@/app/actions/admin-editor";
-import { offerBout } from "@/app/actions/event-flow";
-import { ALL_DIVISIONS, divisionDisplayName } from "@/lib/divisions";
+import { divisionDisplayName } from "@/lib/divisions";
+import { martialArtName } from "@/lib/martial-arts";
+import {
+  AdminOfferBoutForm,
+  type OpponentOption,
+} from "@/components/site/admin-offer-bout-form";
+import {
+  AdminAddBoutForm,
+  type FighterPickOption,
+} from "@/components/site/admin-add-bout-form";
+import { publishConfirmedBout } from "@/app/actions/event-flow";
 
 export const metadata = { title: "Admin · Events & bouts" };
 
@@ -35,16 +43,48 @@ export default async function AdminEventsPage() {
           orderBy: { boutOrder: "asc" },
         },
         registrations: {
-          include: { athlete: true },
+          include: {
+            athlete: { include: { disciplines: true } },
+          },
           orderBy: { createdAt: "asc" },
         },
       },
     }),
     prisma.athlete.findMany({
       where: { profile: { approvalStatus: "approved" } },
+      include: { disciplines: true },
       orderBy: { name: "asc" },
     }),
   ]);
+
+  // Flatten the full opponent pool once; the client form filters by the chosen
+  // division + the interested fighter's primary discipline.
+  const opponentPool: OpponentOption[] = fighters.map((f) => {
+    const primary = f.disciplines.find((d) => d.isPrimary === 1) ?? f.disciplines[0];
+    return {
+      id: f.id,
+      name: f.name,
+      division: f.division ?? "",
+      martialArt: primary?.martialArt ?? f.martialArt ?? "",
+      wins: f.wins,
+      losses: f.losses,
+      draws: f.draws,
+    };
+  });
+
+  const addBoutPool: FighterPickOption[] = fighters.map((f) => {
+    const primary = f.disciplines.find((d) => d.isPrimary === 1) ?? f.disciplines[0];
+    return {
+      id: f.id,
+      name: f.name,
+      gender: f.gender ?? "",
+      division: f.division ?? "",
+      martialArt: primary?.martialArt ?? f.martialArt ?? "",
+      wins: f.wins,
+      losses: f.losses,
+      draws: f.draws,
+    };
+  });
 
   return (
     <>
@@ -244,96 +284,84 @@ export default async function AdminEventsPage() {
 
                 <details className="bg-bg border border-border rounded-lg">
                   <summary className="cursor-pointer px-4 py-3 font-display text-xs tracking-wider text-gold uppercase">
-                    + Add bout (scheduled, no result yet)
+                    + Add bout (offer — awaits both fighters&apos; acceptance)
                   </summary>
-                  <form action={addBout} className="p-4 space-y-3">
-                    <input type="hidden" name="event_id" value={e.id} />
-                    <div className="grid grid-cols-2 gap-2">
-                      <label className="block">
-                        <span className="font-display text-[10px] tracking-wider text-gold uppercase block mb-1">
-                          Red corner
-                        </span>
-                        <select
-                          name="red_id"
-                          required
-                          className="w-full px-3 py-2 bg-bg border border-border text-white text-sm"
-                        >
-                          {fighters.map((f) => (
-                            <option key={f.id} value={f.id}>
-                              {f.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="block">
-                        <span className="font-display text-[10px] tracking-wider text-gold uppercase block mb-1">
-                          Blue corner
-                        </span>
-                        <select
-                          name="blue_id"
-                          required
-                          className="w-full px-3 py-2 bg-bg border border-border text-white text-sm"
-                        >
-                          {fighters.map((f) => (
-                            <option key={f.id} value={f.id}>
-                              {f.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      <label className="block">
-                        <span className="font-display text-[10px] tracking-wider text-gold uppercase block mb-1">
-                          Order
-                        </span>
-                        <input
-                          type="number"
-                          name="bout_order"
-                          min={1}
-                          max={99}
-                          defaultValue={e._count.bouts + 1}
-                          className="w-full px-3 py-2 bg-bg border border-border text-white text-sm"
-                        />
-                      </label>
-                      <label className="block">
-                        <span className="font-display text-[10px] tracking-wider text-gold uppercase block mb-1">
-                          Card section
-                        </span>
-                        <select
-                          name="card_section"
-                          defaultValue="Main"
-                          className="w-full px-3 py-2 bg-bg border border-border text-white text-sm"
-                        >
-                          <option>Main</option>
-                          <option>Co-Main</option>
-                          <option>Prelim</option>
-                        </select>
-                      </label>
-                      <label className="block">
-                        <span className="font-display text-[10px] tracking-wider text-gold uppercase block mb-1">
-                          Division
-                        </span>
-                        <select
-                          name="division"
-                          defaultValue=""
-                          className="w-full px-3 py-2 bg-bg border border-border text-white text-sm"
-                        >
-                          <option value="">—</option>
-                          {ALL_DIVISIONS.map((d) => (
-                            <option key={d.id} value={d.id}>
-                              {d.name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                    <button className="bg-emerald text-white px-4 py-2 text-xs font-display tracking-wider hover:bg-emerald-hi">
-                      ADD BOUT →
-                    </button>
-                  </form>
+                  <AdminAddBoutForm
+                    eventId={e.id}
+                    nextOrder={e._count.bouts + 1}
+                    fighters={addBoutPool}
+                  />
                 </details>
               </div>
+
+              {/* Confirmed bouts awaiting publish onto the fight card. */}
+              {(() => {
+                // Group confirmed registrations by boutRef. A pair of
+                // confirmed rows with the same boutRef = a bout both fighters
+                // have accepted — admin can now publish it onto the card.
+                const confirmed = e.registrations.filter(
+                  (r) => r.status === "confirmed" && r.boutRef,
+                );
+                const byRef = new Map<string, typeof confirmed>();
+                for (const r of confirmed) {
+                  const list = byRef.get(r.boutRef!) ?? [];
+                  list.push(r);
+                  byRef.set(r.boutRef!, list);
+                }
+                // Only pairs that aren't already on the fight card.
+                const pairs = Array.from(byRef.values()).filter((group) => {
+                  if (group.length !== 2) return false;
+                  const [a, b] = group;
+                  return !e.bouts.some(
+                    (bt) =>
+                      (bt.redAthleteId === a.athleteId && bt.blueAthleteId === b.athleteId) ||
+                      (bt.redAthleteId === b.athleteId && bt.blueAthleteId === a.athleteId),
+                  );
+                });
+                if (pairs.length === 0) return null;
+                return (
+                  <div className="bg-bg border border-emerald/40 rounded-lg p-4">
+                    <p className="font-display text-xs tracking-wider text-emerald uppercase mb-3">
+                      Ready to publish ({pairs.length})
+                    </p>
+                    <ul className="divide-y divide-border/60">
+                      {pairs.map((group) => {
+                        const [a, b] = group;
+                        return (
+                          <li
+                            key={a.boutRef}
+                            className="py-2 flex flex-wrap items-center gap-3 text-sm"
+                          >
+                            <span className="text-white">
+                              <span className="text-red-300">{a.athlete.name}</span>
+                              <span className="text-muted mx-2">vs</span>
+                              <span className="text-blue-300">{b.athlete.name}</span>
+                              {a.offerDivision && (
+                                <span className="ml-2 text-xs text-muted">
+                                  · {divisionDisplayName(null, a.offerDivision)}
+                                </span>
+                              )}
+                            </span>
+                            <form
+                              action={publishConfirmedBout}
+                              className="ml-auto"
+                            >
+                              <input type="hidden" name="event_id" value={e.id} />
+                              <input type="hidden" name="bout_ref" value={a.boutRef!} />
+                              <button
+                                type="submit"
+                                className="bg-emerald text-white px-3 py-1.5 text-xs font-display tracking-wider hover:bg-emerald-hi rounded"
+                              >
+                                PUBLISH ON CARD →
+                              </button>
+                            </form>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                );
+              })()}
 
               {/* Existing bouts on this event */}
               {e.bouts.length > 0 && (
@@ -389,18 +417,28 @@ export default async function AdminEventsPage() {
               {e.registrations.length > 0 && (
                 <RegistrationsPanel
                   eventId={e.id}
-                  registrations={e.registrations.map((r) => ({
-                    id: r.id,
-                    status: r.status,
-                    athleteId: r.athleteId,
-                    athleteName: r.athlete.name,
-                    offerOpponent: r.offerOpponent,
-                    offerDivision: r.offerDivision,
-                    offerSection: r.offerSection,
-                    offerNote: r.offerNote,
-                    offerSentAt: r.offerSentAt?.toISOString() ?? null,
-                    respondedAt: r.respondedAt?.toISOString() ?? null,
-                  }))}
+                  opponents={opponentPool}
+                  registrations={e.registrations.map((r) => {
+                    const primary =
+                      r.athlete.disciplines.find((d) => d.isPrimary === 1) ??
+                      r.athlete.disciplines[0];
+                    return {
+                      id: r.id,
+                      status: r.status,
+                      athleteId: r.athleteId,
+                      athleteName: r.athlete.name,
+                      athleteDivision: r.athlete.division ?? "",
+                      athleteMartialArt: primary?.martialArt ?? r.athlete.martialArt ?? "",
+                      athleteRecord: `${r.athlete.wins}-${r.athlete.losses}-${r.athlete.draws}`,
+                      offerOpponent: r.offerOpponent,
+                      offerDivision: r.offerDivision,
+                      offerSection: r.offerSection,
+                      offerNote: r.offerNote,
+                      offerSentAt: r.offerSentAt?.toISOString() ?? null,
+                      respondedAt: r.respondedAt?.toISOString() ?? null,
+                      confirmedAt: r.confirmedAt?.toISOString() ?? null,
+                    };
+                  })}
                 />
               )}
 
@@ -517,16 +555,21 @@ type Registration = {
   status: string;
   athleteId: number;
   athleteName: string;
+  athleteDivision: string;
+  athleteMartialArt: string;
+  athleteRecord: string;
   offerOpponent: string;
   offerDivision: string;
   offerSection: string;
   offerNote: string;
   offerSentAt: string | null;
   respondedAt: string | null;
+  confirmedAt: string | null;
 };
 
 const STATUS_STYLE: Record<string, string> = {
   interested: "bg-gold/20 text-gold",
+  pending_fighter: "bg-gold/10 text-gold border border-gold/40",
   offered: "bg-orange-500/30 text-orange-200",
   accepted: "bg-emerald/30 text-emerald-200",
   declined: "bg-red-500/30 text-red-200",
@@ -537,9 +580,11 @@ const STATUS_STYLE: Record<string, string> = {
 function RegistrationsPanel({
   eventId,
   registrations,
+  opponents,
 }: {
   eventId: number;
   registrations: Registration[];
+  opponents: OpponentOption[];
 }) {
   return (
     <div className="bg-bg border border-border rounded-lg p-4">
@@ -558,7 +603,7 @@ function RegistrationsPanel({
                   STATUS_STYLE[r.status] ?? "bg-border text-white"
                 }`}
               >
-                {r.status.toUpperCase()}
+                {r.status.replace("_", " ").toUpperCase()}
               </span>
               {r.offerSentAt && (
                 <span className="text-[10px] text-muted">
@@ -570,11 +615,28 @@ function RegistrationsPanel({
                   · responded {r.respondedAt.slice(0, 10)}
                 </span>
               )}
+              {r.confirmedAt && (
+                <span className="text-[10px] text-emerald-300 font-display tracking-wider">
+                  · confirmed {r.confirmedAt.slice(0, 10)}
+                </span>
+              )}
             </div>
-            {(r.status === "offered" || r.status === "accepted" || r.status === "declined") && (
+            <p className="text-[11px] text-muted">
+              {r.athleteMartialArt ? martialArtName(r.athleteMartialArt) : "—"}
+              {" · "}
+              {r.athleteDivision
+                ? divisionDisplayName(null, r.athleteDivision)
+                : "no division"}
+              {" · "}
+              <span className="text-white">{r.athleteRecord}</span>
+            </p>
+            {(r.status === "offered" ||
+              r.status === "accepted" ||
+              r.status === "declined" ||
+              r.status === "confirmed") && (
               <p className="text-xs text-muted">
                 Offer: {r.offerOpponent || "—"}
-                {r.offerDivision && ` · ${r.offerDivision}`}
+                {r.offerDivision && ` · ${divisionDisplayName(null, r.offerDivision)}`}
                 {r.offerSection && ` · ${r.offerSection}`}
                 {r.offerNote && ` · ${r.offerNote}`}
               </p>
@@ -584,52 +646,18 @@ function RegistrationsPanel({
                 <summary className="cursor-pointer px-3 py-2 font-display text-[10px] tracking-wider text-gold uppercase">
                   {r.status === "declined" ? "Re-offer bout" : "Offer bout"}
                 </summary>
-                <form action={offerBout} className="p-3 space-y-2">
-                  <input type="hidden" name="event_id" value={eventId} />
-                  <input type="hidden" name="athlete_id" value={r.athleteId} />
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <OfferField name="offer_opponent" label="Opponent" />
-                    <OfferField name="offer_division" label="Division" />
-                    <OfferField
-                      name="offer_section"
-                      label="Card section"
-                      placeholder="Main / Co-Main / Prelim"
-                    />
-                    <OfferField name="offer_note" label="Note" />
-                  </div>
-                  <button className="bg-gold text-bg px-3 py-1.5 text-xs font-display tracking-wider hover:bg-gold-hi rounded">
-                    SEND OFFER →
-                  </button>
-                </form>
+                <AdminOfferBoutForm
+                  eventId={eventId}
+                  athleteId={r.athleteId}
+                  athleteDivision={r.athleteDivision}
+                  athleteMartialArt={r.athleteMartialArt}
+                  opponents={opponents.filter((o) => o.id !== r.athleteId)}
+                />
               </details>
             )}
           </li>
         ))}
       </ul>
     </div>
-  );
-}
-
-function OfferField({
-  name,
-  label,
-  placeholder,
-}: {
-  name: string;
-  label: string;
-  placeholder?: string;
-}) {
-  return (
-    <label className="block">
-      <span className="font-display text-[9px] tracking-wider text-gold uppercase block mb-0.5">
-        {label}
-      </span>
-      <input
-        name={name}
-        type="text"
-        placeholder={placeholder}
-        className="w-full px-2 py-1.5 bg-bg border border-border text-white text-xs rounded"
-      />
-    </label>
   );
 }

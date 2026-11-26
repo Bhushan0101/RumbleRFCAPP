@@ -276,9 +276,16 @@ export default async function AdminRankingsPage({
               </p>
             </header>
 
-            {rankings.length === 0 ? (
+            {candidates.length === 0 ? (
               <p className="text-sm text-muted mb-5">
-                No ranking set for this category yet.
+                No fighters are currently registered in this division. Approve
+                or re-divisions some fighters first to build a ranking.
+              </p>
+            ) : rankings.length === 0 ? (
+              <p className="text-sm text-muted mb-5">
+                No ranking set for this category yet. {candidates.length}{" "}
+                {candidates.length === 1 ? "fighter is" : "fighters are"} eligible —
+                add them from the panel below.
               </p>
             ) : (
               <ol className="divide-y divide-border mb-5">

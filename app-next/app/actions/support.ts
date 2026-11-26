@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { sendMail, MAIL_ADMIN, buildSupportHtml } from "@/lib/mail";
+import { sendMail, MAIL_ADMIN, SITE_URL, buildSupportHtml } from "@/lib/mail";
 
 const supportSchema = z.object({
   subject: z.string().min(1).max(200),
@@ -52,8 +52,9 @@ export async function sendSupportRequest(
   return { ok: true, message: "Thanks — your message has been sent to the W.U.C.O team." };
 }
 
-// Fighter-side "show me the full rankings" ask — admin reviews and responds
-// out-of-band (there is no auto-elevation yet).
+// Fighter-side "show me the full rankings" ask — persists a
+// RankingAccessRequest and emails admin. Admin fulfils from the admin page by
+// minting a RankingShareToken.
 export async function requestFullRankings(
   _prev: SupportState,
   _formData: FormData,
@@ -62,8 +63,6 @@ export async function requestFullRankings(
   if (!session?.user) {
     return { ok: false, message: "You must be signed in to request access." };
   }
-  // Pull the fighter's division/discipline from Prisma so the admin has enough
-  // context to decide without needing to look anything up.
   const { prisma } = await import("@/lib/prisma");
   const user = await prisma.portalUser.findUnique({
     where: { id: Number(session.user.id) },
@@ -91,18 +90,121 @@ export async function requestFullRankings(
     .filter(Boolean)
     .join("\n");
 
+  // Idempotent-ish: if there's already a pending request, don't stack another.
+  const existing = await prisma.rankingAccessRequest.findFirst({
+    where: { userId: user.id, status: "pending" },
+    orderBy: { createdAt: "desc" },
+  });
+  const request =
+    existing ??
+    (await prisma.rankingAccessRequest.create({
+      data: { userId: user.id, scope: "full", note: detailsLines, status: "pending" },
+    }));
+
+  // Notify every admin so the bell pops. Link deep-opens the review modal.
+  const admins = await prisma.portalUser.findMany({
+    where: { role: { in: ["admin", "ranking_admin"] } },
+    select: { id: true },
+  });
+  if (!existing && admins.length > 0) {
+    await prisma.notification.createMany({
+      data: admins.map((a) => ({
+        userId: a.id,
+        kind: "rankings_access_request",
+        title: `Rankings access request from ${user.name}`,
+        body: detailsLines,
+        link: `/portal/admin/ranking-requests?open=${request.id}`,
+      })),
+    });
+  }
+
   await sendMail({
     to: MAIL_ADMIN,
     subject: `Full-rankings access request: ${user.name}`,
     body:
       `${user.name} is asking to view the full W.U.C.O national rankings ` +
       `(not just the public top 10).\n\n${detailsLines}\n\n` +
-      `Review the fighter in the admin portal and reply with next steps if appropriate.`,
+      `Review and share the rankings link from the admin portal:\n` +
+      `${SITE_URL}/portal/admin/ranking-requests?open=${request.id}`,
     category: "fighter_signup",
   });
 
   return {
     ok: true,
-    message: "Request sent. A W.U.C.O admin will review and get back to you.",
+    message: "Request sent. A W.U.C.O admin will share a link with you by email.",
+  };
+}
+
+// Fighter-side "show me rankings for other divisions". Same persistence path
+// but the admin sees a clearer prompt.
+export async function requestExtraRankings(
+  _prev: SupportState,
+  _formData: FormData,
+): Promise<SupportState> {
+  const session = await auth();
+  if (!session?.user) {
+    return { ok: false, message: "You must be signed in to request rankings." };
+  }
+  const { prisma } = await import("@/lib/prisma");
+  const user = await prisma.portalUser.findUnique({
+    where: { id: Number(session.user.id) },
+    include: {
+      fighterProfile: {
+        include: {
+          athlete: { include: { passport: true } },
+        },
+      },
+    },
+  });
+  if (!user) return { ok: false, message: "Account not found." };
+  const a = user.fighterProfile?.athlete;
+  const details = [
+    `From: ${user.name} <${user.email}>`,
+    a ? `Athlete: ${a.name} (#${a.id})` : null,
+    a?.passport?.fighterNo ? `Fighter No: ${a.passport.fighterNo}` : null,
+    a?.division ? `Current division: ${a.division}` : null,
+    a?.martialArt ? `Primary discipline: ${a.martialArt}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const existing = await prisma.rankingAccessRequest.findFirst({
+    where: { userId: user.id, status: "pending" },
+    orderBy: { createdAt: "desc" },
+  });
+  const request =
+    existing ??
+    (await prisma.rankingAccessRequest.create({
+      data: { userId: user.id, scope: "full", note: details, status: "pending" },
+    }));
+
+  const admins = await prisma.portalUser.findMany({
+    where: { role: { in: ["admin", "ranking_admin"] } },
+    select: { id: true },
+  });
+  if (!existing && admins.length > 0) {
+    await prisma.notification.createMany({
+      data: admins.map((adm) => ({
+        userId: adm.id,
+        kind: "rankings_access_request",
+        title: `${user.name} wants other-division rankings`,
+        body: details,
+        link: `/portal/admin/ranking-requests?open=${request.id}`,
+      })),
+    });
+  }
+
+  await sendMail({
+    to: MAIL_ADMIN,
+    subject: `Rankings request (other divisions): ${user.name}`,
+    body:
+      `${user.name} wants visibility into rankings outside their own division.\n\n${details}\n\n` +
+      `Share a link from: ${SITE_URL}/portal/admin/ranking-requests?open=${request.id}`,
+    category: "fighter_signup",
+  });
+
+  return {
+    ok: true,
+    message: "Request sent. A W.U.C.O admin will share a link with you by email.",
   };
 }

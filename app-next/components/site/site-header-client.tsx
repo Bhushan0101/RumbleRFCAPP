@@ -2,11 +2,12 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Search, User, ChevronDown, Menu, X, Bell } from "lucide-react";
+import { User, ChevronDown, Menu, X, Bell } from "lucide-react";
 import { BrandLockup } from "./brand-lockup";
 import { Container } from "@/components/ui/container";
 import { NAV } from "./nav-data";
 import { UserMenu } from "./user-menu";
+import { HeaderSearch } from "./header-search";
 import { cn } from "@/lib/cn";
 
 type Props = {
@@ -93,13 +94,7 @@ export function SiteHeaderClient({ user, unreadNotifications = 0 }: Props) {
 
           {/* Actions */}
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              aria-label="Search"
-              className="hidden sm:grid place-items-center size-10 border border-black/10 bg-white/60 text-[#07251b] hover:border-emerald hover:text-emerald rounded-full transition-colors"
-            >
-              <Search className="size-4" />
-            </button>
+            <HeaderSearch />
             {user && (
               <Link
                 href="/portal/notifications"

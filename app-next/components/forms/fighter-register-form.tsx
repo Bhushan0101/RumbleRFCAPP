@@ -18,7 +18,7 @@ type Step = 1 | 2 | 3 | 4;
 const STEP_FIELDS: Record<Step, string[]> = {
   1: ["first_name", "last_name", "email", "password"],
   2: ["gender", "disciplines", "division"],
-  3: ["date_of_birth", "country", "gym_name", "coach_name", "record_note"],
+  3: ["date_of_birth", "country", "gym_choice", "gym_name_new", "coach_name"],
   4: ["accept_terms", "accept_privacy", "accept_accuracy"],
 };
 
@@ -32,7 +32,6 @@ const STEP_META: { n: Step; label: string }[] = [
 function stepForError(errors: Record<string, string[]> | undefined): Step | null {
   if (!errors) return null;
   const keys = Object.keys(errors);
-  // discipline-row errors come back as "disciplines.0.wins" etc.
   const inStep2 = (k: string) =>
     STEP_FIELDS[2].includes(k) || k.startsWith("disciplines");
   if (keys.some((k) => STEP_FIELDS[1].includes(k))) return 1;
@@ -50,7 +49,9 @@ type DiscRow = {
   draws: number;
 };
 
-export function FighterRegisterForm() {
+export type GymOption = { id: number; name: string; city: string };
+
+export function FighterRegisterForm({ gyms = [] }: { gyms?: GymOption[] }) {
   const [state, action, pending] = useActionState(registerFighter, initial);
   const [step, setStep] = React.useState<Step>(1);
   const [gender, setGender] = React.useState<string>("");
@@ -60,17 +61,19 @@ export function FighterRegisterForm() {
   const [acceptPrivacy, setAcceptPrivacy] = React.useState(false);
   const [acceptAccuracy, setAcceptAccuracy] = React.useState(false);
   const [stepError, setStepError] = React.useState<string>("");
+  const [gymChoice, setGymChoice] = React.useState<string>("");
+  const [gymNameNew, setGymNameNew] = React.useState<string>("");
   const allConsentsOk = acceptTerms && acceptPrivacy && acceptAccuracy;
   const submitIntent = React.useRef(false);
   const formRef = React.useRef<HTMLFormElement>(null);
 
   const selected = Object.keys(rows);
-  // Division dropdown follows the primary discipline (first selected if none chosen).
   const effectivePrimary = primary || selected[0] || "";
   const divisions = divisionsFor(gender, effectivePrimary);
   const divisionReady = divisions.length > 0;
 
-  // Serialize the discipline grid as the single JSON payload the action consumes.
+  // Serialize discipline grid including W-L-D so the server action can
+  // persist declared records per discipline (primary mirrors onto Athlete).
   const disciplinesJson = React.useMemo(() => {
     return JSON.stringify(
       selected.map((id) => ({
@@ -127,7 +130,16 @@ export function FighterRegisterForm() {
         setStepError("Mark one discipline as primary.");
         return false;
       }
-      // Division is a native required select — fall through to the generic check.
+    }
+    if (current === 3) {
+      if (!gymChoice) {
+        setStepError("Pick your gym from the list — or choose \"My gym isn't listed\".");
+        return false;
+      }
+      if (gymChoice === "new" && !gymNameNew.trim()) {
+        setStepError("Type your gym's name.");
+        return false;
+      }
     }
     const names = STEP_FIELDS[current];
     let firstInvalid: HTMLInputElement | null = null;
@@ -146,7 +158,6 @@ export function FighterRegisterForm() {
       try {
         el.scrollIntoView({ behavior: "smooth", block: "center" });
       } catch {}
-      // Inline fallback — iOS Chrome sometimes swallows the native bubble.
       const msg =
         el.validationMessage ||
         `Please complete the "${(el.getAttribute("name") ?? "field").replace(/_/g, " ")}" field.`;
@@ -170,14 +181,12 @@ export function FighterRegisterForm() {
     if (e.key !== "Enter") return;
     const target = e.target as HTMLElement;
     if (target.tagName === "TEXTAREA") return;
-    // Never let Enter submit the form on any step except 4; always suppress it.
     if (step < 4) {
       e.preventDefault();
       e.stopPropagation();
       goNext();
       return;
     }
-    // On step 4, only the submit button may trigger submission.
     if (target.tagName !== "BUTTON") {
       e.preventDefault();
     }
@@ -352,8 +361,8 @@ export function FighterRegisterForm() {
             Pick your disciplines <span className="text-red-400 ml-1">*</span>
           </legend>
           <p className="text-xs text-muted mb-3">
-            Tick every discipline you compete in. You&apos;ll declare a class and a
-            W-L-D record for each one on the next step. One must be your primary.
+            Tick every discipline you compete in. You&apos;ll declare a class and
+            a W-L-D record for each one on the next step. One must be your primary.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {MARTIAL_ARTS.map((m) => {
@@ -408,8 +417,6 @@ export function FighterRegisterForm() {
                             onChange={() => updateRow(m.id, "classCode", c.id)}
                             className="sr-only"
                           />
-                          {/* Kickboxing/Muay Thai keep the single-letter id (J/N/L/C/B/A).
-                              Boxing/MMA show the full name. */}
                           {c.id.length === 1 ? c.id : c.name}
                         </label>
                       ))}
@@ -485,14 +492,64 @@ export function FighterRegisterForm() {
           </label>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <Field
-            name="gym_name"
-            label="Gym name"
-            required
-            errors={state.errors?.gym_name}
-            hint="The gym you train at. Required for verification."
-          />
+        <fieldset className="border border-border rounded-xl p-4 space-y-3">
+          <legend className="font-display text-xs tracking-wider text-gold uppercase px-2">
+            Gym <span className="text-red-400 ml-1">*</span>
+          </legend>
+          <p className="text-xs text-muted">
+            Pick your gym from the list. If it&apos;s not there yet, choose
+            &quot;My gym isn&apos;t listed&quot; and type the name — a W.U.C.O
+            admin will follow up.
+          </p>
+          <label className="block">
+            <span className="font-display text-[10px] tracking-wider text-gold uppercase block mb-1">
+              Your gym
+            </span>
+            <select
+              name="gym_choice"
+              value={gymChoice}
+              onChange={(e) => setGymChoice(e.target.value)}
+              className="w-full px-4 py-3 bg-bg border border-border text-white focus:border-gold outline-none rounded-lg"
+            >
+              <option value="">— pick your gym —</option>
+              {gyms.map((g) => (
+                <option key={g.id} value={String(g.id)}>
+                  {g.name}
+                  {g.city ? ` · ${g.city}` : ""}
+                </option>
+              ))}
+              <option value="new">My gym isn&apos;t listed…</option>
+            </select>
+            {state.errors?.gym_choice && (
+              <span className="text-red-400 text-xs mt-1 block">
+                {state.errors.gym_choice.join(", ")}
+              </span>
+            )}
+          </label>
+          {gymChoice === "new" && (
+            <label className="block">
+              <span className="font-display text-[10px] tracking-wider text-gold uppercase block mb-1">
+                Gym name
+              </span>
+              <input
+                name="gym_name_new"
+                type="text"
+                value={gymNameNew}
+                onChange={(e) => setGymNameNew(e.target.value)}
+                maxLength={200}
+                placeholder="Where you train"
+                className="w-full px-4 py-3 bg-bg border border-border text-white focus:border-gold outline-none rounded-lg"
+              />
+              <span className="text-xs text-muted mt-1 block">
+                We&apos;ll share this with admin so they can onboard your club.
+              </span>
+              {state.errors?.gym_name_new && (
+                <span className="text-red-400 text-xs mt-1 block">
+                  {state.errors.gym_name_new.join(", ")}
+                </span>
+              )}
+            </label>
+          )}
           <Field
             name="coach_name"
             label="Coach name"
@@ -500,7 +557,7 @@ export function FighterRegisterForm() {
             errors={state.errors?.coach_name}
             hint="Your head coach or primary instructor."
           />
-        </div>
+        </fieldset>
 
         <fieldset className="border border-border rounded-xl p-4">
           <legend className="font-display text-xs tracking-wider text-gold uppercase px-2">
@@ -551,18 +608,6 @@ export function FighterRegisterForm() {
               })}
             </div>
           )}
-          <label className="block mt-3">
-            <span className="font-display text-xs tracking-wider text-gold uppercase mb-1.5 block">
-              Record notes <span className="text-neutral-400">(optional)</span>
-            </span>
-            <textarea
-              name="record_note"
-              maxLength={2000}
-              rows={3}
-              placeholder="Promotions you've fought on, titles, dates, references — anything that helps verification."
-              className="w-full px-4 py-3 bg-bg border border-border text-white focus:border-gold outline-none rounded-lg"
-            />
-          </label>
         </fieldset>
         <input type="hidden" name="disciplines" value={disciplinesJson} />
       </div>
@@ -718,6 +763,7 @@ function Field({
   min,
   max,
   minLength,
+  placeholder,
 }: {
   name: string;
   label: string;
@@ -729,6 +775,7 @@ function Field({
   min?: number;
   max?: number;
   minLength?: number;
+  placeholder?: string;
 }) {
   return (
     <label className="block">
@@ -744,6 +791,7 @@ function Field({
         min={min}
         max={max}
         minLength={minLength}
+        placeholder={placeholder}
         className="w-full px-4 py-3 bg-bg border border-border text-white focus:border-gold outline-none rounded-lg"
       />
       {hint && <span className="text-xs text-muted mt-1 block">{hint}</span>}
@@ -763,9 +811,8 @@ function RecordInput({
   value: number;
   onChange: (v: number) => void;
 }) {
-  // Keep a local string so the leading 0 clears cleanly on focus / typing.
+  // Local string so a leading 0 clears cleanly on focus/typing.
   const [text, setText] = React.useState<string>(value > 0 ? String(value) : "");
-  // Sync when the parent resets the value (e.g. after unticking a discipline).
   React.useEffect(() => {
     setText(value > 0 ? String(value) : "");
   }, [value]);
@@ -786,12 +833,10 @@ function RecordInput({
             setText("");
             onChange(0);
           }
-          // Select so typing replaces any stray value on iOS.
           e.currentTarget.select();
         }}
         onChange={(e) => {
           const raw = e.target.value;
-          // Allow blank while editing — commit on blur.
           if (raw === "") {
             setText("");
             onChange(0);

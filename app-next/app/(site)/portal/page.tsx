@@ -295,6 +295,7 @@ async function AdminDashboard({ name }: { name: string }) {
           <QuickTile href="/portal/admin/fighters" title="Fighters" />
           <QuickTile href="/portal/admin/events" title="Events & bouts" />
           <QuickTile href="/portal/admin/rankings" title="Rankings" />
+          <QuickTile href="/portal/admin/ranking-requests" title="Ranking requests" />
           <QuickTile href="/portal/admin/gyms" title="Gym enquiries" />
           <QuickTile href="/portal/admin/news" title="News posts" />
           <QuickTile href="/portal/admin/inbox" title="Inbox" />
@@ -327,19 +328,22 @@ async function FighterDashboard({ userId, name }: { userId: number; name: string
   const isApproved = profile?.approvalStatus === "approved";
   const hasPortrait = !!profile?.athlete.portraitUrl;
   const injuryAnswered = !!profile?.injuryAnsweredAt;
-  const hasFightHistoryEntry = (profile?.athlete.fightHistory.length ?? 0) > 0;
+  const hasSocialLink =
+    !!profile?.athlete.instagramHandle ||
+    !!profile?.athlete.facebookUrl ||
+    !!profile?.athlete.tiktokHandle;
 
   const score = completenessScore({
     approved: isApproved,
     hasPortrait,
     injuryAnswered,
-    hasFightHistoryEntry,
+    hasSocialLink,
   });
   const steps = completenessSteps({
     approved: isApproved,
     hasPortrait,
     injuryAnswered,
-    hasFightHistoryEntry,
+    hasSocialLink,
   });
 
   return (
