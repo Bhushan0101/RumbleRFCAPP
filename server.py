@@ -311,6 +311,8 @@ def _protect_portal_records(db, collection, rid, clean=None):
         changed=current and any(key in clean and clean[key]!=current[key] for key in ('wins','losses','draws'))
         if changed and db.execute('SELECT 1 FROM bouts b JOIN bout_results r ON r.bout_id=b.id WHERE b.red_athlete_id=? OR b.blue_athlete_id=?',(rid,rid)).fetchone():
             raise Conflict('This fighter has portal results. Correct the bout result in the member portal.')
+    if collection=='athletes' and clean is None and db.execute('SELECT 1 FROM fighter_profiles WHERE athlete_id=?',(rid,)).fetchone():
+        raise Conflict('This fighter has a member portal account. Remove their portal account first, or use the portal admin to manage the profile.')
     if collection=='events' and clean is None and db.execute('SELECT 1 FROM bouts b JOIN bout_results r ON r.bout_id=b.id WHERE b.event_id=?',(rid,)).fetchone():
         raise Conflict('An event with recorded results cannot be deleted.')
 
@@ -334,9 +336,12 @@ def op_delete(collection,rid):
     table=COLLECTIONS[collection][0]
     try: rid=int(rid)
     except (TypeError,ValueError): raise Invalid('invalid id')
-    with rw_conn() as db:
-        _protect_portal_records(db,collection,rid)
-        cur=db.execute(f'DELETE FROM {table} WHERE id=?',(rid,))
+    try:
+        with rw_conn() as db:
+            _protect_portal_records(db,collection,rid)
+            cur=db.execute(f'DELETE FROM {table} WHERE id=?',(rid,))
+    except sqlite3.IntegrityError as e:
+        raise Conflict(f'Cannot delete: a related record still references this row ({e})')
     if not cur.rowcount: raise NotFound('not found')
     return {'ok':True}
 

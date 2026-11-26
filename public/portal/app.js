@@ -125,6 +125,7 @@ document.addEventListener("submit", async (event) => {
   }
   const data = Object.fromEntries(new FormData(form));
   let message = "Saved successfully.";
+  let saved = false;
   try {
     switch (form.dataset.form) {
       case "fighter-register": {
@@ -133,6 +134,7 @@ document.addEventListener("submit", async (event) => {
           render();
           return;
         }
+        saved = true;
         await refresh();
         navigate("fighter");
         flash(
@@ -146,6 +148,7 @@ document.addEventListener("submit", async (event) => {
       }
       case "login":
         await api("login", "POST", data);
+        saved = true;
         await refresh();
         navigate(state.user.role === "fighter" ? "fighter" : "account");
         flash("Welcome back.");
@@ -156,18 +159,21 @@ document.addEventListener("submit", async (event) => {
           email: data.email,
           password: data.password,
         });
+        saved = true;
         await refresh();
         navigate("account");
         flash("Your account is ready.");
         return;
       case "fighter-profile":
         await api("profile", "PUT", data);
+        saved = true;
         message = "Your profile has been updated.";
         break;
       case "fighter-photo":
         await api("profile/photo", "PUT", {
           file: await preparePhoto(form.elements.photo.files[0]),
         });
+        saved = true;
         message = "Your fighter photo has been updated.";
         break;
       case "fighter-gym":
@@ -175,12 +181,14 @@ document.addEventListener("submit", async (event) => {
           gym_code: data.gym_code,
           coach_id: data.coach_id || "",
         });
+        saved = true;
         message = data.gym_code
           ? "Your gym connection has been updated."
           : "You are now registered as an independent fighter.";
         break;
       case "profile":
         await api("profile", "PUT", data);
+        saved = true;
         break;
       case "event": {
         data.registration_open = Number(data.registration_open);
@@ -190,6 +198,7 @@ document.addEventListener("submit", async (event) => {
           form.dataset.id ? "PUT" : "POST",
           data,
         );
+        saved = true;
         await refresh();
         navigate("event-" + (form.dataset.id || result.id));
         flash("Your event has been saved.");
@@ -204,6 +213,7 @@ document.addEventListener("submit", async (event) => {
             acknowledged: form.elements.acknowledged?.checked === true,
           },
         );
+        saved = true;
         message =
           "Registration confirmed. Your reference: " + entry.registration_ref;
         break;
@@ -212,6 +222,7 @@ document.addEventListener("submit", async (event) => {
           ...data,
           outside: true,
         });
+        saved = true;
         await refresh();
         navigate(state.user.role === "fighter" ? "fighter" : "account");
         flash(
@@ -220,21 +231,26 @@ document.addEventListener("submit", async (event) => {
         return;
       case "bout":
         await api("events/" + form.dataset.event + "/bouts", "POST", data);
+        saved = true;
         break;
       case "result":
         await api("bouts/" + form.dataset.bout + "/result", "PUT", data);
+        saved = true;
         break;
       case "fighter-review":
         await api("fighters/" + form.dataset.athlete + "/review", "PUT", data);
+        saved = true;
         message =
           "Review saved. The fighter can refresh their workspace to see the decision.";
         break;
       case "admin-fighter-profile":
         await api("fighters/" + form.dataset.athlete + "/profile", "PUT", data);
+        saved = true;
         message = "Fighter details updated.";
         break;
       case "rankings":
         await api("rankings", "PUT", data);
+        saved = true;
         break;
       case "ranking-excel":
         await previewRankings(form);
@@ -245,7 +261,12 @@ document.addEventListener("submit", async (event) => {
     await refresh();
     flash(message);
   } catch (error) {
-    flash(error.message, true);
+    if (saved) {
+      try { await refresh(); } catch (_) {}
+      flash(message);
+    } else {
+      flash(error.message, true);
+    }
   } finally {
     if (button) {
       button.disabled = false;
